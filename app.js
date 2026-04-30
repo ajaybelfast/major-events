@@ -392,6 +392,10 @@ function buildSidebar() {
 
   getSortedCatData().forEach(({ cat, rowHeight, isLiveSlice, isActive, nextMs }) => {
     const iconCls = SPORT_ICONS[cat] || 'fa-solid fa-trophy';
+    const logoUrl = ESPORTS_LOGOS[cat];
+    const iconHtml = logoUrl
+      ? `<img src="${logoUrl}" class="esports-logo" alt="${cat}" onerror="this.replaceWith(Object.assign(document.createElement('i'),{className:'${iconCls}'}))">`
+      : `<i class="${iconCls}"></i>`;
 
     let statusHtml = '';
     if (isLiveSlice || isActive) {
@@ -406,7 +410,7 @@ function buildSidebar() {
     row.className    = 'sidebar-row';
     row.style.height = rowHeight + 'px';
     row.innerHTML = `
-      <div class="category-icon"><i class="${iconCls}"></i></div>
+      <div class="category-icon">${iconHtml}</div>
       <div class="category-label" title="${cat}">${cat}</div>
       ${statusHtml}
     `;
@@ -665,10 +669,13 @@ function navigateToEvent(ev) {
 
   let targetY = wrapper.scrollTop;
   if (bars.length > 0) {
-    const row = bars[0].closest('.timeline-row');
+    const bar = bars[0];
+    const row = bar.closest('.timeline-row');
     if (row) {
-      const headerH = 64;
-      targetY = Math.max(0, row.offsetTop - headerH - (wrapper.clientHeight - headerH) * 0.3);
+      const headerH    = 64;
+      const barTopInRow = parseFloat(bar.style.top) || 0;
+      const barCenter   = row.offsetTop + barTopInRow + BAR_H / 2;
+      targetY = Math.max(0, barCenter - headerH - (wrapper.clientHeight - headerH) * 0.5);
     }
   }
 

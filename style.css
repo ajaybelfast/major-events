@@ -327,6 +327,12 @@ body {
   flex-shrink: 0;
 }
 
+.esports-logo {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
 .category-icon i {
   font-size: 16px;
   color: #8b949e;

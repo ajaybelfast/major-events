@@ -225,6 +225,20 @@ const SPORT_ICONS = {
 };
 
 // ============================================================
+//  ESPORTS LOGOS — via Simple Icons CDN (simpleicons.org)
+// ============================================================
+const ESPORTS_LOGOS = {
+  'Esports (Dota 2)':            'https://cdn.simpleicons.org/dota2/8b949e',
+  'Esports (VALORANT)':          'https://cdn.simpleicons.org/valorant/8b949e',
+  'Esports (League of Legends)': 'https://cdn.simpleicons.org/leagueoflegends/8b949e',
+  'Esports (Apex Legends)':      'https://cdn.simpleicons.org/apexlegends/8b949e',
+  'Esports (Overwatch)':         'https://cdn.simpleicons.org/overwatch/8b949e',
+  'Esports (Counter-Strike 2)':  'https://cdn.simpleicons.org/counter-strike/8b949e',
+  'Esports (Call of Duty)':      'https://cdn.simpleicons.org/callofduty/8b949e',
+  'Esports (Rainbow Six)':       'https://cdn.simpleicons.org/rainbowsix/8b949e',
+};
+
+// ============================================================
 //  COUNTRY FLAGS
 // ============================================================
 const FLAGS = {
