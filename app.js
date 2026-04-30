@@ -347,6 +347,13 @@ function getSortedCatData() {
   return [...liveEntries, ...restEntries];
 }
 
+function toggleSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  const btn     = document.getElementById('hamburgerBtn');
+  const collapsed = sidebar.classList.toggle('collapsed');
+  btn.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+}
+
 function setSort(mode) {
   sortMode = mode;
   document.getElementById('btnAlpha').classList.toggle('on',   mode === 'alpha');
@@ -380,6 +387,7 @@ function buildSidebar() {
       const row = document.createElement('div');
       row.className    = 'sidebar-row';
       row.style.height = rowHeight + 'px';
+      row.title        = country;
       row.innerHTML = `
         <div class="category-icon" style="font-size:24px">${FLAGS[country] || '🌐'}</div>
         <div class="category-label" title="${country}">${country}</div>
@@ -409,6 +417,7 @@ function buildSidebar() {
     const row = document.createElement('div');
     row.className    = 'sidebar-row';
     row.style.height = rowHeight + 'px';
+    row.title        = cat;
     row.innerHTML = `
       <div class="category-icon">${iconHtml}</div>
       <div class="category-label" title="${cat}">${cat}</div>

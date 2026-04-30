@@ -30,7 +30,10 @@
 <div class="main">
   <div class="sidebar">
     <div class="sidebar-header">
-      <span>Sport</span>
+      <div class="sidebar-header-top">
+        <span>Sport</span>
+        <button class="hamburger-btn" id="hamburgerBtn" onclick="toggleSidebar()" title="Collapse sidebar"><i class="fa-solid fa-bars"></i></button>
+      </div>
       <div class="sort-btns">
         <button class="sort-btn"    id="btnAlpha"   onclick="setSort('alpha')">A–Z</button>
         <button class="sort-btn on" id="btnLive"    onclick="setSort('live')"><i class="fa-solid fa-bolt"></i> Live</button>
