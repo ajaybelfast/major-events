@@ -326,6 +326,15 @@ body {
   margin-left: auto;
 }
 
+.status-soon-link {
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+
+.status-soon-link:hover {
+  color: #c9d1d9;
+}
+
 /* overflow:hidden makes scrollTop writable programmatically */
 #sidebarRows {
   flex: 1;

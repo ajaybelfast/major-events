@@ -373,9 +373,10 @@ function buildSidebar() {
   container.innerHTML = '';
 
   if (sortMode === 'country') {
-    getSortedCountryData().forEach(({ country, rowHeight, isLiveSlice, isActive, nextMs }) => {
+    getSortedCountryData().forEach(({ country, events, rowHeight, isLiveSlice, isActive, nextMs }) => {
       const today    = new Date(); today.setHours(0, 0, 0, 0);
       const nextDays = nextMs !== null ? Math.round((nextMs - today.getTime()) / 86400000) : null;
+      const nextEv   = nextMs !== null ? events.find(ev => new Date(ev.startDate).getTime() === nextMs) : null;
 
       let statusHtml = '';
       if (isLiveSlice || isActive) {
@@ -393,17 +394,25 @@ function buildSidebar() {
         <div class="category-label" title="${country}">${country}</div>
         ${statusHtml}
       `;
+      if (nextEv) {
+        const badge = row.querySelector('.status-soon');
+        if (badge) {
+          badge.classList.add('status-soon-link');
+          badge.addEventListener('click', e => { e.stopPropagation(); navigateToEvent(nextEv, true); });
+        }
+      }
       container.appendChild(row);
     });
     return;
   }
 
-  getSortedCatData().forEach(({ cat, rowHeight, isLiveSlice, isActive, nextMs }) => {
+  getSortedCatData().forEach(({ cat, events, rowHeight, isLiveSlice, isActive, nextMs }) => {
     const iconCls = SPORT_ICONS[cat] || 'fa-solid fa-trophy';
     const logoUrl = ESPORTS_LOGOS[cat];
     const iconHtml = logoUrl
       ? `<img src="${logoUrl}" class="esports-logo" alt="${cat}" onerror="this.replaceWith(Object.assign(document.createElement('i'),{className:'${iconCls}'}))">`
       : `<i class="${iconCls}"></i>`;
+    const nextEv = nextMs !== null ? events.find(ev => new Date(ev.startDate).getTime() === nextMs) : null;
 
     let statusHtml = '';
     if (isLiveSlice || isActive) {
@@ -423,6 +432,13 @@ function buildSidebar() {
       <div class="category-label" title="${cat}">${cat}</div>
       ${statusHtml}
     `;
+    if (nextEv) {
+      const badge = row.querySelector('.status-soon');
+      if (badge) {
+        badge.classList.add('status-soon-link');
+        badge.addEventListener('click', e => { e.stopPropagation(); navigateToEvent(nextEv, true); });
+      }
+    }
     container.appendChild(row);
   });
 }
@@ -661,6 +677,26 @@ function animateScroll(targetX, duration) {
   requestAnimationFrame(step);
 }
 
+function scrollToStart() {
+  const wrapper = document.getElementById('timelineWrapper');
+  const todayPx = dayOffset(new Date().toISOString().split('T')[0]) * DAY_PX;
+  const targetX = Math.max(0, todayPx - wrapper.clientWidth * 0.25);
+  const targetY = 0;
+  const startX  = wrapper.scrollLeft;
+  const startY  = wrapper.scrollTop;
+  const deltaX  = targetX - startX;
+  const deltaY  = targetY - startY;
+  const t0      = performance.now();
+
+  (function step(now) {
+    const p    = Math.min((now - t0) / 1400, 1);
+    const ease = 1 - Math.pow(1 - p, 4);
+    wrapper.scrollLeft = startX + deltaX * ease;
+    wrapper.scrollTop  = startY + deltaY * ease;
+    if (p < 1) requestAnimationFrame(step);
+  })(performance.now());
+}
+
 function scrollToToday() {
   const wrapper  = document.getElementById('timelineWrapper');
   const todayPx  = dayOffset(new Date().toISOString().split('T')[0]) * DAY_PX;
@@ -671,17 +707,17 @@ function scrollToToday() {
 // ============================================================
 //  NAVIGATE TO EVENT (shared by search + header click)
 // ============================================================
-function navigateToEvent(ev) {
+function navigateToEvent(ev, horizontalOnly = false) {
   const wrapper = document.getElementById('timelineWrapper');
   const bars    = document.querySelectorAll(`[data-ev-name="${ev.name.replace(/"/g, '\\"')}"]`);
   const targetX = Math.max(0, dayOffset(ev.startDate) * DAY_PX - wrapper.clientWidth * 0.25);
 
   let targetY = wrapper.scrollTop;
-  if (bars.length > 0) {
+  if (!horizontalOnly && bars.length > 0) {
     const bar = bars[0];
     const row = bar.closest('.timeline-row');
     if (row) {
-      const headerH    = 64;
+      const headerH     = 64;
       const barTopInRow = parseFloat(bar.style.top) || 0;
       const barCenter   = row.offsetTop + barTopInRow + BAR_H / 2;
       targetY = Math.max(0, barCenter - headerH - (wrapper.clientHeight - headerH) * 0.5);
