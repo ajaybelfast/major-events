@@ -259,6 +259,7 @@ function buildMonthHeaders() {
         <div class="event-header-label">★ ${ev.name}</div>
         <div class="event-header-tick"></div>
       `;
+      marker.addEventListener('click', () => navigateToEvent(ev));
       header.appendChild(marker);
     });
 }
@@ -655,6 +656,48 @@ function scrollToToday() {
 }
 
 // ============================================================
+//  NAVIGATE TO EVENT (shared by search + header click)
+// ============================================================
+function navigateToEvent(ev) {
+  const wrapper = document.getElementById('timelineWrapper');
+  const bars    = document.querySelectorAll(`[data-ev-name="${ev.name.replace(/"/g, '\\"')}"]`);
+  const targetX = Math.max(0, dayOffset(ev.startDate) * DAY_PX - wrapper.clientWidth * 0.25);
+
+  let targetY = wrapper.scrollTop;
+  if (bars.length > 0) {
+    const row = bars[0].closest('.timeline-row');
+    if (row) {
+      const headerH = 64;
+      targetY = Math.max(0, row.offsetTop - headerH - (wrapper.clientHeight - headerH) * 0.3);
+    }
+  }
+
+  const startX = wrapper.scrollLeft;
+  const startY = wrapper.scrollTop;
+  const deltaX = targetX - startX;
+  const deltaY = targetY - startY;
+  const t0     = performance.now();
+  const dur    = 1000;
+
+  (function step(now) {
+    const p    = Math.min((now - t0) / dur, 1);
+    const ease = 1 - Math.pow(1 - p, 4);
+    wrapper.scrollLeft = startX + deltaX * ease;
+    wrapper.scrollTop  = startY + deltaY * ease;
+    if (p < 1) requestAnimationFrame(step);
+  })(performance.now());
+
+  setTimeout(() => {
+    bars.forEach(el => {
+      el.classList.remove('bar-flash');
+      void el.offsetWidth;
+      el.classList.add('bar-flash');
+      el.addEventListener('animationend', () => el.classList.remove('bar-flash'), { once: true });
+    });
+  }, 750);
+}
+
+// ============================================================
 //  SEARCH
 // ============================================================
 function initSearch() {
@@ -667,45 +710,9 @@ function initSearch() {
   }
 
   function goToTournament(ev) {
-    const wrapper = document.getElementById('timelineWrapper');
     input.value = '';
     closeResults();
-
-    const bars    = document.querySelectorAll(`[data-ev-name="${ev.name.replace(/"/g, '\\"')}"]`);
-    const targetX = Math.max(0, dayOffset(ev.startDate) * DAY_PX - wrapper.clientWidth * 0.25);
-
-    let targetY = wrapper.scrollTop;
-    if (bars.length > 0) {
-      const row = bars[0].closest('.timeline-row');
-      if (row) {
-        const headerH = 64;
-        targetY = Math.max(0, row.offsetTop - headerH - (wrapper.clientHeight - headerH) * 0.3);
-      }
-    }
-
-    const startX = wrapper.scrollLeft;
-    const startY = wrapper.scrollTop;
-    const deltaX = targetX - startX;
-    const deltaY = targetY - startY;
-    const t0     = performance.now();
-    const dur    = 1000;
-
-    (function step(now) {
-      const p    = Math.min((now - t0) / dur, 1);
-      const ease = 1 - Math.pow(1 - p, 4);
-      wrapper.scrollLeft = startX + deltaX * ease;
-      wrapper.scrollTop  = startY + deltaY * ease;
-      if (p < 1) requestAnimationFrame(step);
-    })(performance.now());
-
-    setTimeout(() => {
-      bars.forEach(el => {
-        el.classList.remove('bar-flash');
-        void el.offsetWidth;
-        el.classList.add('bar-flash');
-        el.addEventListener('animationend', () => el.classList.remove('bar-flash'), { once: true });
-      });
-    }, 750);
+    navigateToEvent(ev);
   }
 
   let matches = [];
