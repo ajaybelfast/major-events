@@ -262,6 +262,9 @@ function buildMonthHeaders() {
         <div class="event-header-label">★ ${ev.name}</div>
         <div class="event-header-tick"></div>
       `;
+      marker.addEventListener('mouseenter', e => showTooltip(e, ev, '#F7C948'));
+      marker.addEventListener('mousemove',  moveTooltip);
+      marker.addEventListener('mouseleave', hideTooltip);
       marker.addEventListener('click', () => navigateToEvent(ev));
       header.appendChild(marker);
     });
