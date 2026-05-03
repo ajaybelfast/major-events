@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Major Sporting Tournaments 2026–2027</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="style.css?v=22">
+  <link rel="stylesheet" href="style.css?v=23">
 </head>
 <body>
 
@@ -32,8 +32,11 @@
   <div class="sidebar">
     <div class="sidebar-header">
       <div class="sidebar-header-top">
-        <span>Sport</span>
-        <button class="hamburger-btn" id="hamburgerBtn" onclick="toggleSidebar()" title="Collapse sidebar"><i class="fa-solid fa-bars"></i></button>
+        <span id="sidebarLabel">Sport</span>
+        <div class="sidebar-header-actions">
+          <button class="filter-btn" id="filterBtn" onclick="toggleFilterPanel()" title="Filter by sport"><i class="fa-solid fa-sliders"></i></button>
+          <button class="hamburger-btn" id="hamburgerBtn" onclick="toggleSidebar()" title="Collapse sidebar"><i class="fa-solid fa-bars"></i></button>
+        </div>
       </div>
       <div class="sort-btns">
         <button class="sort-btn"    id="btnAlpha"   onclick="setSort('alpha')">A–Z</button>
@@ -42,6 +45,12 @@
       </div>
     </div>
     <div id="sidebarRows"></div>
+  </div>
+  <div class="filter-panel" id="filterPanel">
+    <div class="filter-panel-list" id="filterOptions"></div>
+    <div class="filter-footer">
+      <button class="filter-clear-btn" onclick="clearFilters()">Clear all</button>
+    </div>
   </div>
   <div class="timeline-wrapper" id="timelineWrapper">
     <div class="timeline">
@@ -53,7 +62,7 @@
 
 <div class="tooltip" id="tooltip"></div>
 
-<script src="data.js?v=22"></script>
-<script src="app.js?v=22"></script>
+<script src="data.js?v=23"></script>
+<script src="app.js?v=23"></script>
 </body>
 </html>

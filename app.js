@@ -158,6 +158,9 @@ function getCountryStatus({ events }) {
 function getSortedCountryData() {
   const today   = new Date(); today.setHours(0, 0, 0, 0);
   const todayMs = today.getTime();
+  const source  = activeFilters.size > 0
+    ? getCountryData().filter(d => activeFilters.has(d.country))
+    : getCountryData();
 
   function makeCountryEntry(country, events, isLiveSlice) {
     const { laneCount, rowHeight } = assignCountryLanes(events);
@@ -173,7 +176,7 @@ function getSortedCountryData() {
 
   const liveEntries = [], restEntries = [];
 
-  getCountryData().forEach(({ country, events }) => {
+  source.forEach(({ country, events }) => {
     const active = events.filter(ev => {
       const s = new Date(ev.startDate).getTime();
       const e = new Date(ev.endDate).getTime() + 86400000;
@@ -265,9 +268,94 @@ function buildMonthHeaders() {
 }
 
 // ============================================================
-//  SORT MODE
+//  SORT MODE + FILTERS
 // ============================================================
 let sortMode = 'live';
+let activeFilters = new Set();
+
+function loadFilters() {
+  try {
+    const saved = localStorage.getItem(`mjr_filters_${sortMode}`);
+    activeFilters = saved ? new Set(JSON.parse(saved)) : new Set();
+  } catch { activeFilters = new Set(); }
+  updateFilterBtn();
+}
+
+function saveFilters() {
+  localStorage.setItem(`mjr_filters_${sortMode}`, JSON.stringify([...activeFilters]));
+}
+
+function updateFilterBtn() {
+  const btn = document.getElementById('filterBtn');
+  if (!btn) return;
+  const count = activeFilters.size;
+  btn.classList.toggle('filter-btn-active', count > 0);
+  let badge = btn.querySelector('.filter-badge');
+  if (count > 0) {
+    if (!badge) { badge = document.createElement('span'); badge.className = 'filter-badge'; btn.appendChild(badge); }
+    badge.textContent = count;
+  } else if (badge) {
+    badge.remove();
+  }
+}
+
+function toggleFilterPanel() {
+  const panel = document.getElementById('filterPanel');
+  const isOpen = panel.classList.toggle('open');
+  if (isOpen) renderFilterOptions();
+}
+
+function renderFilterOptions() {
+  const container = document.getElementById('filterOptions');
+  container.innerHTML = '';
+  const options = sortMode === 'country'
+    ? getCountryData().map(d => d.country)
+    : catData.map(d => d.cat);
+  options.forEach(opt => {
+    const label = document.createElement('label');
+    label.className = 'filter-option';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = activeFilters.has(opt);
+    cb.addEventListener('change', () => {
+      if (cb.checked) activeFilters.add(opt);
+      else activeFilters.delete(opt);
+      saveFilters();
+      updateFilterBtn();
+      rebuildViews();
+    });
+    const span = document.createElement('span');
+    span.textContent = opt;
+    label.appendChild(cb);
+    label.appendChild(span);
+    container.appendChild(label);
+  });
+}
+
+function clearFilters() {
+  activeFilters.clear();
+  saveFilters();
+  updateFilterBtn();
+  renderFilterOptions();
+  rebuildViews();
+}
+
+function rebuildViews() {
+  document.getElementById('sidebarRows').innerHTML = '';
+  document.getElementById('timelineRows').innerHTML = '';
+  buildSidebar();
+  buildTimelineRows();
+}
+
+function initFilterClickOutside() {
+  document.addEventListener('click', e => {
+    const panel = document.getElementById('filterPanel');
+    const btn   = document.getElementById('filterBtn');
+    if (panel.classList.contains('open') && !panel.contains(e.target) && btn && !btn.contains(e.target)) {
+      panel.classList.remove('open');
+    }
+  });
+}
 
 function assignLanes(events) {
   const laneEnd = [];
@@ -300,6 +388,7 @@ function assignCountryLanes(events) {
 function getSortedCatData() {
   const today   = new Date(); today.setHours(0, 0, 0, 0);
   const todayMs = today.getTime();
+  const source  = activeFilters.size > 0 ? catData.filter(d => activeFilters.has(d.cat)) : catData;
 
   function makeEntry(cat, events, isLiveSlice) {
     const { laneCount, rowHeight } = assignLanes(events);
@@ -314,13 +403,13 @@ function getSortedCatData() {
   }
 
   if (sortMode === 'alpha') {
-    return catData.map(({ cat, events }) => makeEntry(cat, events, false));
+    return source.map(({ cat, events }) => makeEntry(cat, events, false));
   }
 
   // Live mode: pull active events into compact top rows; rest sorts below
   const liveEntries = [], restEntries = [];
 
-  catData.forEach(({ cat, events }) => {
+  source.forEach(({ cat, events }) => {
     const active = events.filter(ev => {
       const s = new Date(ev.startDate).getTime();
       const e = new Date(ev.endDate).getTime() + 86400000;
@@ -353,13 +442,20 @@ function toggleSidebar() {
   const btn       = document.getElementById('hamburgerBtn');
   const collapsed = sidebar.classList.toggle('collapsed');
   btn.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+  if (collapsed) document.getElementById('filterPanel').classList.remove('open');
   if (window.innerWidth <= 768) {
     backdrop.classList.toggle('visible', !collapsed);
   }
 }
 
 function setSort(mode) {
+  document.getElementById('filterPanel').classList.remove('open');
   sortMode = mode;
+  loadFilters();
+  const label = mode === 'country' ? 'Country' : 'Sport';
+  document.getElementById('sidebarLabel').textContent = label;
+  const filterBtn = document.getElementById('filterBtn');
+  if (filterBtn) filterBtn.title = `Filter by ${label.toLowerCase()}`;
   document.getElementById('btnAlpha').classList.toggle('on',   mode === 'alpha');
   document.getElementById('btnLive').classList.toggle('on',    mode === 'live');
   document.getElementById('btnCountry').classList.toggle('on', mode === 'country');
@@ -844,11 +940,13 @@ async function init() {
     computeTimelineBounds();
     buildData();
     buildMonthHeaders();
+    loadFilters();
     buildSidebar();
     buildTimelineRows();
     initScrollSync();
     initDragScroll();
     initSearch();
+    initFilterClickOutside();
     if (window.innerWidth <= 768) {
       document.querySelector('.sidebar').classList.add('collapsed');
     }
