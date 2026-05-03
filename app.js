@@ -730,6 +730,43 @@ function initScrollSync() {
 }
 
 // ============================================================
+//  MOBILE TOUCH SCROLL FORWARDING
+// ============================================================
+function initMobileTouch() {
+  if (window.innerWidth > 768) return;
+
+  const wrapper     = document.getElementById('timelineWrapper');
+  const filterPanel = document.getElementById('filterPanel');
+
+  // Forward vertical swipes on `el` to the timeline wrapper.
+  // A tap (no real movement) is left alone so existing click/onclick handlers fire.
+  function addScrollForwarding(el) {
+    let startY, startX, lastY;
+
+    el.addEventListener('touchstart', e => {
+      startY = lastY = e.touches[0].clientY;
+      startX = e.touches[0].clientX;
+    }, { passive: true });
+
+    el.addEventListener('touchmove', e => {
+      if (filterPanel.classList.contains('open')) return;
+      const currentY = e.touches[0].clientY;
+      const totalDy  = Math.abs(currentY - startY);
+      const totalDx  = Math.abs(e.touches[0].clientX - startX);
+      // Only intercept clearly vertical swipes (> 4 px and more vertical than horizontal)
+      if (totalDy > 4 && totalDy > totalDx) {
+        wrapper.scrollTop -= (currentY - lastY);
+        e.preventDefault(); // suppresses the onclick so sidebar doesn't toggle on scroll
+      }
+      lastY = currentY;
+    }, { passive: false });
+  }
+
+  addScrollForwarding(document.querySelector('.sidebar'));
+  addScrollForwarding(document.getElementById('sidebarBackdrop'));
+}
+
+// ============================================================
 //  DRAG-TO-SCROLL
 // ============================================================
 function initDragScroll() {
@@ -947,6 +984,7 @@ async function init() {
     initDragScroll();
     initSearch();
     initFilterClickOutside();
+    initMobileTouch();
     if (window.innerWidth <= 768) {
       document.querySelector('.sidebar').classList.add('collapsed');
     }
