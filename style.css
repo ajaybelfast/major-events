@@ -848,28 +848,25 @@ body {
 /* ── Mobile ──────────────────────────────────────────────── */
 @media (max-width: 768px) {
 
-  /* Header: two rows */
   .page-header {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     padding: 10px 14px;
-    gap: 0;
-    row-gap: 8px;
+    gap: 10px;
   }
 
   .header-logo-wrap {
     width: auto;
-    flex: 1;
+    flex-shrink: 0;
   }
 
   .header-title { display: none; }
 
   .today-btn { display: none; }
 
-  /* Search drops to its own full-width row */
   .header-right {
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     margin-left: 0;
-    order: 3;
   }
 
   .search-wrap { flex: 1; }
