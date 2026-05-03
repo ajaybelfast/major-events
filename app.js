@@ -493,7 +493,7 @@ function buildSidebar() {
       row.style.height = rowHeight + 'px';
       row.title        = country;
       row.innerHTML = `
-        <div class="category-icon" style="font-size:24px">${FLAGS[country] || '🌐'}</div>
+        <div class="category-icon" style="font-size:24px">${getFlag(country)}</div>
         <div class="category-label" title="${country}">${country}</div>
         ${statusHtml}
       `;
@@ -603,7 +603,7 @@ function buildTimelineRows() {
           bar.innerHTML = `<i class="${iconCls} bar-flag" style="font-size:13px"></i>`;
         }
       } else {
-        const flag = FLAGS[ev.country] || '🌐';
+        const flag = getFlag(ev.country);
         if (widthPx >= 58) {
           bar.innerHTML = `<span class="bar-flag">${flag}</span><span class="bar-text">${ev.name}</span>`;
         } else if (widthPx >= 34) {
@@ -627,7 +627,7 @@ function buildTimelineRows() {
             const iconCls = SPORT_ICONS[effectiveCategory(ev)] || 'fa-solid fa-trophy';
             todayLabel.innerHTML = `<i class="${iconCls}" style="font-size:13px;flex-shrink:0"></i><span class="bar-text">${ev.name}</span>`;
           } else {
-            todayLabel.innerHTML = `<span class="bar-flag">${FLAGS[ev.country] || '🌐'}</span><span class="bar-text">${ev.name}</span>`;
+            todayLabel.innerHTML = `<span class="bar-flag">${getFlag(ev.country)}</span><span class="bar-text">${ev.name}</span>`;
           }
           bar.appendChild(todayLabel);
         }
@@ -695,7 +695,7 @@ function showTooltip(e, ev, color) {
   tooltip.innerHTML = `
     <div class="tt-sport" style="color:${color}">${effectiveCategory(ev)}</div>
     <div class="tt-name">${ev.name}</div>
-    <div class="tt-row"><span style="font-size:24px">${FLAGS[ev.country] || '🌐'}</span>&nbsp;${ev.country}</div>
+    <div class="tt-row"><span style="font-size:24px">${getFlag(ev.country)}</span>&nbsp;${ev.country}</div>
     <div class="tt-row">📅&nbsp;${fmtDate(ev.startDate)} – ${fmtDate(ev.endDate)}</div>
     <div class="tt-row">⏱&nbsp;${ev.lengthDays} day${ev.lengthDays !== 1 ? 's' : ''}</div>
   `;
@@ -935,7 +935,7 @@ function initSearch() {
       results.innerHTML = matches.map((ev, i) =>
         `<div class="search-result-item" data-idx="${i}">
           <span class="sr-name">${ev.name}</span>
-          <span class="sr-meta">${FLAGS[ev.country] || '🌐'} ${ev.country} &middot; ${effectiveCategory(ev)} &middot; ${fmtDate(ev.startDate)}</span>
+          <span class="sr-meta">${getFlag(ev.country)} ${ev.country} &middot; ${effectiveCategory(ev)} &middot; ${fmtDate(ev.startDate)}</span>
         </div>`
       ).join('');
 

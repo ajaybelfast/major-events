@@ -293,3 +293,9 @@ const FLAGS = {
   'TBC':                   '🌍', 'USA/Canada/Mexico':    '🌎', 'Belgium/Netherlands': '🌍',
   'Australia/NZ/PNG':      '🌏',
 };
+
+// Case-insensitive flag lookup — handles ALL CAPS or mixed-case country names from the sheet
+const _FLAGS_LC = Object.fromEntries(Object.entries(FLAGS).map(([k, v]) => [k.toLowerCase(), v]));
+function getFlag(country) {
+  return FLAGS[country] || _FLAGS_LC[(country || '').toLowerCase()] || '🌐';
+}
