@@ -748,11 +748,12 @@ body {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  cursor: pointer;
   z-index: 12;
+  overflow: hidden;
+  pointer-events: none;
 }
 
-.event-header-marker:hover .event-header-label {
+.event-header-label:hover {
   background: rgba(247, 201, 72, 0.25);
   border-color: rgba(247, 201, 72, 0.9);
 }
@@ -771,6 +772,9 @@ body {
   text-overflow: ellipsis;
   margin-top: 4px;
   letter-spacing: 0.3px;
+  cursor: pointer;
+  flex-shrink: 0;
+  pointer-events: auto;
 }
 
 .event-header-tick {

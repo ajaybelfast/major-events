@@ -249,25 +249,55 @@ function buildMonthHeaders() {
     header.appendChild(todayLbl);
   }
 
-  // Star markers for event-format entries
-  TOURNAMENTS
+  // Star markers — assign vertical lanes so no two labels ever overlap horizontally
+  const LABEL_SLOT_H = 20; // px per lane slot — 3 lanes fit within the 64px header
+
+  const headerEvents = TOURNAMENTS
     .filter(ev => ev.format === 'event')
-    .forEach(ev => {
-      const x = dayOffset(ev.startDate) * DAY_PX;
-      if (x < 0 || x > TOTAL_W) return;
-      const marker = document.createElement('div');
-      marker.className  = 'event-header-marker';
-      marker.style.left = x + 'px';
-      marker.innerHTML  = `
-        <div class="event-header-label">★ ${ev.name}</div>
-        <div class="event-header-tick"></div>
-      `;
-      marker.addEventListener('mouseenter', e => showTooltip(e, ev, '#F7C948'));
-      marker.addEventListener('mousemove',  moveTooltip);
-      marker.addEventListener('mouseleave', hideTooltip);
-      marker.addEventListener('click', () => navigateToEvent(ev));
-      header.appendChild(marker);
-    });
+    .map(ev => ({ ev, x: dayOffset(ev.startDate) * DAY_PX }))
+    .filter(({ x }) => x >= 0 && x <= TOTAL_W)
+    .sort((a, b) => a.x - b.x);
+
+  // Estimate rendered label width (capped at max-width 120px) + small buffer
+  function estLabelW(name) {
+    return Math.min((name.length + 2) * 6.5 + 14, 120) + 6;
+  }
+
+  const laneEnd = []; // rightmost x occupied per lane
+  headerEvents.forEach(item => {
+    let lane = laneEnd.findIndex(right => right <= item.x);
+    if (lane === -1) lane = laneEnd.length;
+    laneEnd[lane] = item.x + estLabelW(item.ev.name);
+    item.lane = lane;
+  });
+
+  headerEvents.forEach(({ ev, x, lane }) => {
+    const marker = document.createElement('div');
+    marker.className  = 'event-header-marker';
+    marker.style.left = x + 'px';
+
+    // Spacer pushes label down to the correct lane row
+    if (lane > 0) {
+      const spacer = document.createElement('div');
+      spacer.style.cssText = `height:${lane * LABEL_SLOT_H}px;flex-shrink:0`;
+      marker.appendChild(spacer);
+    }
+
+    const label = document.createElement('div');
+    label.className   = 'event-header-label';
+    label.textContent = `★ ${ev.name}`;
+    label.addEventListener('mouseenter', e => showTooltip(e, ev, '#F7C948'));
+    label.addEventListener('mousemove',  moveTooltip);
+    label.addEventListener('mouseleave', hideTooltip);
+    label.addEventListener('click', () => navigateToEvent(ev));
+    marker.appendChild(label);
+
+    const tick = document.createElement('div');
+    tick.className = 'event-header-tick';
+    marker.appendChild(tick);
+
+    header.appendChild(marker);
+  });
 }
 
 // ============================================================
@@ -970,6 +1000,31 @@ function initSearch() {
 }
 
 // ============================================================
+//  KEYBOARD SHORTCUTS
+// ============================================================
+function initKeyboardShortcuts() {
+  document.addEventListener('keydown', e => {
+    const inInput = document.activeElement.tagName === 'INPUT' ||
+                    document.activeElement.tagName === 'TEXTAREA';
+
+    // Escape: close search results if open, otherwise scroll to start (like logo click)
+    if (e.key === 'Escape' && !inInput) {
+      scrollToStart();
+      return;
+    }
+
+    if (inInput) return; // don't steal T / S while user is typing
+
+    if (e.key === 't' || e.key === 'T') {
+      scrollToToday();
+    } else if (e.key === 's' || e.key === 'S') {
+      e.preventDefault();
+      document.getElementById('searchInput').focus();
+    }
+  });
+}
+
+// ============================================================
 //  INIT
 // ============================================================
 async function init() {
@@ -988,6 +1043,7 @@ async function init() {
     initSearch();
     initFilterClickOutside();
     initMobileTouch();
+    initKeyboardShortcuts();
     if (window.innerWidth <= 768) {
       document.querySelector('.sidebar').classList.add('collapsed');
     }
