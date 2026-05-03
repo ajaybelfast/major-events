@@ -703,6 +703,79 @@ body {
   z-index: 60 !important;
 }
 
+/* ── Sidebar backdrop (mobile overlay) ──────────────────── */
+.sidebar-backdrop {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 49;
+}
+
+/* ── Mobile ──────────────────────────────────────────────── */
+@media (max-width: 768px) {
+
+  /* Header: two rows */
+  .page-header {
+    flex-wrap: wrap;
+    padding: 10px 14px;
+    gap: 0;
+    row-gap: 8px;
+  }
+
+  .header-logo-wrap {
+    width: auto;
+    flex: 1;
+  }
+
+  .header-title { display: none; }
+
+  .today-btn { display: none; }
+
+  /* Search drops to its own full-width row */
+  .header-right {
+    width: 100%;
+    margin-left: 0;
+    order: 3;
+  }
+
+  .search-wrap { flex: 1; }
+
+  .search-input {
+    width: 100% !important;
+    font-size: 14px;
+    padding: 8px 10px 8px 32px;
+  }
+
+  .search-results { min-width: unset; }
+
+  /* Sidebar overlays the timeline */
+  .main { position: relative; }
+
+  .sidebar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    z-index: 50;
+  }
+
+  /* Backdrop visible when sidebar is open */
+  .sidebar-backdrop.visible { display: block; }
+
+  /* Larger tap targets for sort buttons */
+  .sort-btn {
+    padding: 6px 8px;
+    font-size: 10px;
+  }
+
+  /* Larger hamburger tap target */
+  .hamburger-btn {
+    padding: 6px 8px;
+    font-size: 16px;
+  }
+}
+
 /* ── Scrollbar ── thicker and easier to grab ─────────────── */
 .timeline-wrapper::-webkit-scrollbar { width: 8px; height: 10px; }
 .timeline-wrapper::-webkit-scrollbar-track { background: #161b22; }

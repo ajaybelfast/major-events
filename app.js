@@ -348,10 +348,14 @@ function getSortedCatData() {
 }
 
 function toggleSidebar() {
-  const sidebar = document.querySelector('.sidebar');
-  const btn     = document.getElementById('hamburgerBtn');
+  const sidebar   = document.querySelector('.sidebar');
+  const backdrop  = document.getElementById('sidebarBackdrop');
+  const btn       = document.getElementById('hamburgerBtn');
   const collapsed = sidebar.classList.toggle('collapsed');
   btn.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+  if (window.innerWidth <= 768) {
+    backdrop.classList.toggle('visible', !collapsed);
+  }
 }
 
 function setSort(mode) {
@@ -845,6 +849,9 @@ async function init() {
     initScrollSync();
     initDragScroll();
     initSearch();
+    if (window.innerWidth <= 768) {
+      document.querySelector('.sidebar').classList.add('collapsed');
+    }
     requestAnimationFrame(scrollToToday);
   } catch (err) {
     console.error('Failed to load tournament data:', err);
