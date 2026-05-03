@@ -11,7 +11,7 @@ function getColor(type) {
 // ============================================================
 //  TIMELINE CONFIG
 // ============================================================
-const DAY_PX = 18;
+const DAY_PX = window.innerWidth <= 768 ? 9 : 18;
 const BAR_H  = 29;
 const LANE_H = 37;
 const ROW_PAD = 8;
