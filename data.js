@@ -195,6 +195,7 @@ const SPORT_ICONS = {
   'Basketball':                  'fa-solid fa-basketball',
   'Combat Sports':               'fa-solid fa-hand-fist',
   'Cricket':                     'fa-solid fa-baseball-bat-ball',
+  'Darts':                       'fa-solid fa-bullseye',
   'Cycling':                     'fa-solid fa-person-biking',
   'Esports (Counter-Strike 2)':  'fa-solid fa-crosshairs',
   'Esports (VALORANT)':          'fa-solid fa-shield-halved',
@@ -240,7 +241,7 @@ const ESPORTS_LOGOS = {
 // ============================================================
 const FLAGS = {
   // ── British Isles ─────────────────────────────────────────
-  'UK':                    '🇬🇧', 'England':              '🏴󠁧󠁢󠁥󠁮󠁧󠁿', 'Scotland':         '🏴󠁧󠁢󠁳󠁣󠁴󠁿',
+  'UK':                    '🇬🇧', 'United Kingdom':       '🇬🇧', 'England':          '🏴󠁧󠁢󠁥󠁮󠁧󠁿', 'Scotland':         '🏴󠁧󠁢󠁳󠁣󠁴󠁿',
   'Wales':                 '🏴󠁧󠁢󠁷󠁬󠁳󠁿', 'Ireland':              '🇮🇪', 'Isle of Man':      '🇮🇲',
   // ── Western Europe ────────────────────────────────────────
   'France':                '🇫🇷', 'Germany':              '🇩🇪', 'Spain':            '🇪🇸',

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Major Sporting Tournaments 2026–2027</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="style.css?v=26">
+  <link rel="stylesheet" href="style.css?v=37">
 </head>
 <body>
 
@@ -18,16 +18,27 @@
     <p>Click and drag to scroll &middot; Hover over any event for details</p>
   </div>
   <div class="header-right">
+    <div class="view-toggle">
+      <button class="view-btn on" id="btnTimeline" onclick="setView('timeline')">
+        <i class="fa-solid fa-table-list"></i><span class="view-btn-label">Timeline</span>
+      </button>
+      <button class="view-btn" id="btnCalendar" onclick="setView('calendar')">
+        <i class="fa-solid fa-calendar-days"></i><span class="view-btn-label">Calendar</span>
+      </button>
+      <button class="view-btn" id="btnWeekly" onclick="setView('weekly')">
+        <i class="fa-solid fa-list-ul"></i><span class="view-btn-label">Weekly</span>
+      </button>
+    </div>
     <div class="search-wrap">
       <i class="fa-solid fa-magnifying-glass search-icon"></i>
       <input type="text" id="searchInput" class="search-input" placeholder="Search tournament…" autocomplete="off">
       <div class="search-results" id="searchResults"></div>
     </div>
-    <button class="today-btn" onclick="scrollToToday()">&#9654; Today</button>
+    <button class="today-btn" onclick="goToToday()">&#9654; Today</button>
   </div>
 </div>
 
-<div class="main">
+<div class="main" id="mainView">
   <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar()"></div>
   <div class="sidebar">
     <div class="sidebar-header">
@@ -60,9 +71,39 @@
   </div>
 </div>
 
+<div class="cw-layout" id="cwLayout">
+  <div class="cw-sidebar" id="cwSidebar">
+    <div class="cw-sidebar-header">
+      <span class="cw-sidebar-title">Filters</span>
+      <span class="cw-active-badge" id="cwActiveBadge"></span>
+    </div>
+    <div class="cw-search-wrap">
+      <i class="fa-solid fa-magnifying-glass cw-search-icon"></i>
+      <input type="text" id="cwSearchInput" class="cw-search-input" placeholder="Search…" autocomplete="off" oninput="filterCwSidebar(this.value)">
+    </div>
+    <div class="cw-sidebar-body" id="cwSidebarBody">
+      <div class="cw-section" id="cwSportSection">
+        <div class="cw-section-title">Sport</div>
+        <div class="cw-filter-list" id="cwSportList"></div>
+      </div>
+      <div class="cw-section" id="cwCountrySection">
+        <div class="cw-section-title">Country</div>
+        <div class="cw-filter-list" id="cwCountryList"></div>
+      </div>
+    </div>
+    <div class="cw-sidebar-footer">
+      <button class="cw-clear-btn" id="cwClearBtn" onclick="clearCwFilters()" disabled>Clear filters</button>
+    </div>
+  </div>
+  <div class="cw-main">
+    <div class="calendar-view" id="calendarView"></div>
+    <div class="weekly-view" id="weeklyView"></div>
+  </div>
+</div>
+
 <div class="tooltip" id="tooltip"></div>
 
-<script src="data.js?v=28"></script>
-<script src="app.js?v=30"></script>
+<script src="data.js?v=30"></script>
+<script src="app.js?v=51"></script>
 </body>
 </html>

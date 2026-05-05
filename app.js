@@ -37,6 +37,14 @@ function dayOffset(dateStr) {
   return Math.round((new Date(dateStr) - TIMELINE_START) / 86400000);
 }
 
+// Parse a YYYY-MM-DD string as local midnight (not UTC) so date comparisons
+// against locally-constructed dates (weekStart, monthStart, etc.) are correct.
+function parseLocalDate(str) {
+  if (!str) return new Date(NaN);
+  const [y, m, d] = str.split('-');
+  return new Date(+y, +m - 1, +d);
+}
+
 // ============================================================
 //  DATA SOURCE
 // ============================================================
@@ -56,13 +64,14 @@ async function loadData() {
     .map(row => {
       const parts = row.split(',');
       const get   = name => (parts[col(name)] || '').trim();
+      const startDate = get('startdate');
       const ev = {
         category:  get('category'),
         name:      get('name'),
         format:    get('format'),
         country:   get('country'),
-        startDate: get('startdate'),
-        endDate:   get('enddate'),
+        startDate,
+        endDate:   get('enddate') || startDate,
       };
       const game = get('game');
       if (game) ev.game = game;
@@ -253,7 +262,7 @@ function buildMonthHeaders() {
   const LABEL_SLOT_H = 20; // px per lane slot — 3 lanes fit within the 64px header
 
   const headerEvents = TOURNAMENTS
-    .filter(ev => ev.format === 'event')
+    .filter(ev => ev.format === 'event' || ev.format === 'race')
     .map(ev => ({ ev, x: dayOffset(ev.startDate) * DAY_PX }))
     .filter(({ x }) => x >= 0 && x <= TOTAL_W)
     .sort((a, b) => a.x - b.x);
@@ -606,7 +615,7 @@ function buildTimelineRows() {
   }
 
   function makeBar(ev, startPx, widthPx, topPx, laneIdx, sportColor, isCountryView) {
-    const isEvent = ev.format === 'event';
+    const isEvent = ev.format === 'event' || ev.format === 'onedayevent' || ev.format === 'race';
     const bar = document.createElement('div');
     bar.className = 'tournament-bar';
     bar.dataset.evName = ev.name;
@@ -867,6 +876,18 @@ function scrollToStart() {
   })(performance.now());
 }
 
+function goToToday() {
+  if (currentView === 'timeline') {
+    scrollToToday();
+  } else if (currentView === 'calendar') {
+    const cell = document.querySelector('.cal-month-current');
+    if (cell) cell.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } else if (currentView === 'weekly') {
+    const section = document.querySelector('.week-section.week-current');
+    if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
 function scrollToToday() {
   const wrapper  = document.getElementById('timelineWrapper');
   const todayPx  = dayOffset(new Date().toISOString().split('T')[0]) * DAY_PX;
@@ -877,6 +898,39 @@ function scrollToToday() {
 // ============================================================
 //  NAVIGATE TO EVENT (shared by search + header click)
 // ============================================================
+function scrollToWeekEvent(ev) {
+  const evDate    = new Date(ev.startDate);
+  const container = document.getElementById('weeklyView');
+  const sections  = container.querySelectorAll('.week-section[data-week-start]');
+  for (const section of sections) {
+    const ws = new Date(section.dataset.weekStart);
+    const we = new Date(ws); we.setDate(we.getDate() + 6);
+    if (evDate >= ws && evDate <= we) {
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      section.querySelectorAll('.week-event-item').forEach(item => {
+        if (item.dataset.evName === ev.name) {
+          item.classList.add('week-event-flash');
+          item.addEventListener('animationend', () => item.classList.remove('week-event-flash'), { once: true });
+        }
+      });
+      break;
+    }
+  }
+}
+
+function scrollToCalendarEvent(ev) {
+  const evDate = new Date(ev.startDate);
+  const cell   = document.querySelector(`.cal-month-cell[data-year-month="${evDate.getFullYear()}-${evDate.getMonth()}"]`);
+  if (!cell) return;
+  cell.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  cell.querySelectorAll('.cal-event-item').forEach(item => {
+    if (item.dataset.evName === ev.name) {
+      item.classList.add('cal-event-flash');
+      item.addEventListener('animationend', () => item.classList.remove('cal-event-flash'), { once: true });
+    }
+  });
+}
+
 function navigateToEvent(ev, horizontalOnly = false) {
   const wrapper = document.getElementById('timelineWrapper');
   const bars    = document.querySelectorAll(`[data-ev-name="${ev.name.replace(/"/g, '\\"')}"]`);
@@ -934,7 +988,13 @@ function initSearch() {
   function goToTournament(ev) {
     input.value = '';
     closeResults();
-    navigateToEvent(ev);
+    if (currentView === 'calendar') {
+      scrollToCalendarEvent(ev);
+    } else if (currentView === 'weekly') {
+      scrollToWeekEvent(ev);
+    } else {
+      navigateToEvent(ev);
+    }
   }
 
   let matches = [];
@@ -1000,6 +1060,343 @@ function initSearch() {
 }
 
 // ============================================================
+//  CALENDAR / WEEKLY SIDEBAR FILTERS
+// ============================================================
+let currentView = 'timeline';
+const cwFilters = { sports: new Set(), countries: new Set() };
+
+function getFilteredTournaments() {
+  const { sports, countries } = cwFilters;
+  if (!sports.size && !countries.size) return TOURNAMENTS;
+  return TOURNAMENTS.filter(ev => {
+    const sportOk   = !sports.size   || sports.has(effectiveCategory(ev));
+    const countryOk = !countries.size || countries.has(ev.country);
+    return sportOk && countryOk;
+  });
+}
+
+function buildCwSidebar() {
+  buildCwList(
+    'cwSportList',
+    [...new Set(TOURNAMENTS.map(ev => effectiveCategory(ev)))].sort(),
+    cwFilters.sports,
+    sport => {
+      const cls   = SPORT_ICONS[sport] || 'fa-solid fa-trophy';
+      const color = getColor(sport);
+      return `<i class="${cls}" style="color:${color};width:14px;text-align:center;flex-shrink:0;font-size:12px"></i>`;
+    }
+  );
+  buildCwList(
+    'cwCountryList',
+    [...new Set(TOURNAMENTS.map(ev => ev.country))].sort(),
+    cwFilters.countries,
+    country => `<span style="font-size:15px;flex-shrink:0;line-height:1">${getFlag(country)}</span>`
+  );
+  updateCwUI();
+}
+
+function buildCwList(listId, items, filterSet, iconFn) {
+  const list = document.getElementById(listId);
+  list.innerHTML = '';
+  items.forEach(item => {
+    const el = document.createElement('div');
+    el.className = 'cw-filter-item' + (filterSet.has(item) ? ' cw-active' : '');
+    el.dataset.label = item.toLowerCase();
+    el.innerHTML = `${iconFn(item)}<span class="cw-filter-label">${item}</span>`;
+    el.addEventListener('click', () => {
+      filterSet.has(item) ? filterSet.delete(item) : filterSet.add(item);
+      el.classList.toggle('cw-active', filterSet.has(item));
+      updateCwUI();
+      rebuildCwView();
+    });
+    list.appendChild(el);
+  });
+}
+
+function filterCwSidebar(q) {
+  const lq = q.trim().toLowerCase();
+  ['cwSportList', 'cwCountryList'].forEach(id => {
+    const list = document.getElementById(id);
+    let anyVisible = false;
+    list.querySelectorAll('.cw-filter-item').forEach(el => {
+      const match = !lq || el.dataset.label.includes(lq);
+      el.style.display = match ? '' : 'none';
+      if (match) anyVisible = true;
+    });
+    // hide section title if nothing matches
+    const section = list.closest('.cw-section');
+    if (section) section.style.display = anyVisible || !lq ? '' : 'none';
+  });
+}
+
+function updateCwUI() {
+  const total = cwFilters.sports.size + cwFilters.countries.size;
+  const badge = document.getElementById('cwActiveBadge');
+  if (badge) { badge.textContent = total || ''; badge.style.display = total ? '' : 'none'; }
+  const btn = document.getElementById('cwClearBtn');
+  if (btn) btn.disabled = !total;
+}
+
+function clearCwFilters() {
+  cwFilters.sports.clear();
+  cwFilters.countries.clear();
+  document.getElementById('cwSearchInput').value = '';
+  filterCwSidebar('');
+  buildCwSidebar();
+  rebuildCwView();
+}
+
+function rebuildCwView() {
+  if (currentView === 'calendar') buildCalendarView();
+  else if (currentView === 'weekly') buildWeeklyView();
+}
+
+function setView(view) {
+  currentView = view;
+  const mainEl    = document.getElementById('mainView');
+  const cwLayout  = document.getElementById('cwLayout');
+  const calEl     = document.getElementById('calendarView');
+  const weeklyEl  = document.getElementById('weeklyView');
+  const btnTL     = document.getElementById('btnTimeline');
+  const btnCal    = document.getElementById('btnCalendar');
+  const btnWeekly = document.getElementById('btnWeekly');
+  const todayBtn  = document.querySelector('.today-btn');
+
+  mainEl.style.display    = 'none';
+  cwLayout.style.display  = 'none';
+  calEl.style.display     = 'none';
+  weeklyEl.style.display  = 'none';
+  btnTL.classList.remove('on');
+  btnCal.classList.remove('on');
+  btnWeekly.classList.remove('on');
+  if (todayBtn) todayBtn.style.display = '';
+
+  if (view === 'timeline') {
+    mainEl.style.display = 'flex';
+    btnTL.classList.add('on');
+  } else if (view === 'calendar') {
+    cwLayout.style.display = 'flex';
+    calEl.style.display    = 'block';
+    btnCal.classList.add('on');
+    buildCalendarView();
+  } else if (view === 'weekly') {
+    cwLayout.style.display = 'flex';
+    weeklyEl.style.display = 'block';
+    btnWeekly.classList.add('on');
+    buildWeeklyView();
+  }
+}
+
+function firstMondayOfYear(year) {
+  const jan1 = new Date(year, 0, 1);
+  const daysToMon = (8 - jan1.getDay()) % 7;
+  return new Date(year, 0, 1 + daysToMon);
+}
+
+function buildWeeklyView() {
+  const container = document.getElementById('weeklyView');
+  container.innerHTML = '';
+
+  const today      = new Date(); today.setHours(0,0,0,0);
+  const startYear  = TIMELINE_START.getFullYear();
+  const endYear    = TIMELINE_END.getFullYear();
+  const MONTHS     = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  for (let year = startYear; year <= endYear; year++) {
+    const yearStart = firstMondayOfYear(year);
+    const yearEnd   = firstMondayOfYear(year + 1); // exclusive: first Monday of next year
+
+    let yearHeaderAdded = false;
+    let weekNum = 1;
+    let weekStart = new Date(yearStart);
+
+    while (weekStart < yearEnd) {
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+
+      // Only render weeks that overlap the data range
+      if (weekEnd >= TIMELINE_START && weekStart <= TIMELINE_END) {
+        // Add year header before the first visible week of this year
+        if (!yearHeaderAdded) {
+          const yearLabel = document.createElement('div');
+          yearLabel.className = 'weekly-year-label';
+          yearLabel.textContent = year;
+          container.appendChild(yearLabel);
+          yearHeaderAdded = true;
+        }
+
+        const isCurrentWeek = today >= weekStart && today <= weekEnd;
+
+        const weekEvents = getFilteredTournaments()
+          .filter(ev => {
+            const s = parseLocalDate(ev.startDate);
+            const e = parseLocalDate(ev.endDate);
+            return s <= weekEnd && e >= weekStart;
+          })
+          .sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+
+        const section = document.createElement('div');
+        section.className = 'week-section' + (isCurrentWeek ? ' week-current' : '');
+        section.dataset.weekStart = weekStart.toISOString().split('T')[0];
+
+        const hdr = document.createElement('div');
+        hdr.className = 'week-header';
+        const sd = weekStart.getDate(), sm = MONTHS[weekStart.getMonth()];
+        const ed = weekEnd.getDate(),   em = MONTHS[weekEnd.getMonth()];
+        hdr.innerHTML = `<span class="week-num-label">Week ${weekNum}</span><span class="week-date-range">${sd} ${sm} – ${ed} ${em}</span>`;
+        section.appendChild(hdr);
+
+        if (weekEvents.length > 0) {
+          const list = document.createElement('div');
+          list.className = 'week-event-list';
+
+          weekEvents.forEach(ev => {
+            const cat     = effectiveCategory(ev);
+            const iconCls = SPORT_ICONS[cat] || 'fa-solid fa-trophy';
+            const color   = getColor(cat);
+            const isNew   = new Date(ev.startDate) >= weekStart;
+
+            const item = document.createElement('div');
+            item.className   = 'week-event-item' + (isNew ? '' : ' week-event-ongoing');
+            item.dataset.evName = ev.name;
+
+            const icon = document.createElement('i');
+            icon.className  = iconCls;
+            icon.style.color = color;
+
+            const nameEl = document.createElement('span');
+            nameEl.className   = 'week-event-name';
+            nameEl.textContent = ev.name;
+
+            const flagEl = document.createElement('span');
+            flagEl.className   = 'week-event-flag';
+            flagEl.textContent = getFlag(ev.country);
+
+            item.appendChild(icon);
+            item.appendChild(nameEl);
+            item.appendChild(flagEl);
+
+            item.addEventListener('mouseenter', e => showTooltip(e, ev, color));
+            item.addEventListener('mousemove',  moveTooltip);
+            item.addEventListener('mouseleave', hideTooltip);
+            item.addEventListener('click', () => {
+              setView('timeline');
+              setTimeout(() => navigateToEvent(ev), 350);
+            });
+
+            list.appendChild(item);
+          });
+
+          section.appendChild(list);
+        }
+
+        container.appendChild(section);
+      }
+
+      weekNum++;
+      weekStart.setDate(weekStart.getDate() + 7);
+    }
+  }
+
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const current = container.querySelector('.week-section.week-current');
+    if (current) {
+      const cr = container.getBoundingClientRect();
+      const tr = current.getBoundingClientRect();
+      container.scrollTop += tr.top - cr.top;
+    }
+  }));
+}
+
+function navigateToWeekForEvent(ev) {
+  setView('weekly');
+  setTimeout(() => scrollToWeekEvent(ev), 120);
+}
+
+function buildCalendarView() {
+  const container = document.getElementById('calendarView');
+  container.innerHTML = '';
+
+  const MONTH_NAMES = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  const today      = new Date(); today.setHours(0,0,0,0);
+  const startYear  = TIMELINE_START.getFullYear();
+  const endYear    = TIMELINE_END.getFullYear();
+
+  for (let year = startYear; year <= endYear; year++) {
+    const yearEl = document.createElement('div');
+    yearEl.className   = 'cal-year-label';
+    yearEl.textContent = year;
+    container.appendChild(yearEl);
+
+    const grid = document.createElement('div');
+    grid.className = 'cal-grid';
+    container.appendChild(grid);
+
+    for (let m = 0; m < 12; m++) {
+      const monthStart = new Date(year, m, 1);
+      const monthEnd   = new Date(year, m + 1, 0);
+      const isCurrent  = today >= monthStart && today <= monthEnd;
+
+      const monthEvents = getFilteredTournaments()
+        .filter(ev => {
+          const s = parseLocalDate(ev.startDate);
+          const e = parseLocalDate(ev.endDate);
+          return s <= monthEnd && e >= monthStart;
+        })
+        .sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+
+      const cell = document.createElement('div');
+      cell.className = 'cal-month-cell' + (isCurrent ? ' cal-month-current' : '');
+      cell.dataset.yearMonth = `${year}-${m}`;
+
+      const mHeader = document.createElement('div');
+      mHeader.className   = 'cal-month-header';
+      mHeader.textContent = MONTH_NAMES[m];
+      cell.appendChild(mHeader);
+
+      const list = document.createElement('div');
+      list.className = 'cal-event-list';
+
+      monthEvents.forEach(ev => {
+        const cat     = effectiveCategory(ev);
+        const iconCls = SPORT_ICONS[cat] || 'fa-solid fa-trophy';
+        const color   = getColor(cat);
+
+        const item = document.createElement('div');
+        item.className = 'cal-event-item' + (ev.important ? ' cal-event-important' : '');
+        item.dataset.evName = ev.name;
+
+        const icon = document.createElement('i');
+        icon.className = iconCls;
+        icon.style.color = color;
+
+        const name = document.createElement('span');
+        name.className   = 'cal-event-name';
+        name.textContent = ev.name;
+
+        item.appendChild(icon);
+        item.appendChild(name);
+
+        item.addEventListener('mouseenter', e => showTooltip(e, ev, color));
+        item.addEventListener('mousemove',  moveTooltip);
+        item.addEventListener('mouseleave', hideTooltip);
+        item.addEventListener('click', () => navigateToWeekForEvent(ev));
+
+        list.appendChild(item);
+      });
+
+      cell.appendChild(list);
+      grid.appendChild(cell);
+    }
+  }
+
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const current = container.querySelector('.cal-month-current');
+    if (current) current.scrollIntoView({ block: 'start' });
+  }));
+}
+
+// ============================================================
 //  KEYBOARD SHORTCUTS
 // ============================================================
 function initKeyboardShortcuts() {
@@ -1016,10 +1413,12 @@ function initKeyboardShortcuts() {
     if (inInput) return; // don't steal T / S while user is typing
 
     if (e.key === 't' || e.key === 'T') {
-      scrollToToday();
+      goToToday();
     } else if (e.key === 's' || e.key === 'S') {
       e.preventDefault();
       document.getElementById('searchInput').focus();
+    } else if (e.key === 'c' || e.key === 'C') {
+      setView(currentView === 'calendar' ? 'timeline' : 'calendar');
     }
   });
 }
@@ -1038,6 +1437,7 @@ async function init() {
     loadFilters();
     buildSidebar();
     buildTimelineRows();
+    buildCwSidebar();
     initScrollSync();
     initDragScroll();
     initSearch();
