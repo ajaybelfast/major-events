@@ -51,24 +51,64 @@ function parseLocalDate(str) {
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSfVuGE4L38QC5CVV9zc3AN-vZ8Pi0ka7ieO10gpPZVq4bDYqoK41kUNaSxoKbGpmnEuwubg_Ln_mdE/pub?output=csv';
 
 let TOURNAMENTS = [];
+let MATCHES = [];
+let _activeMatchTournament = null;
+
+// RFC-4180 CSV parser — handles quoted fields containing commas or newlines.
+function parseCSVRow(line) {
+  const fields = [];
+  let field = '', inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"' && line[i + 1] === '"') { field += '"'; i++; }
+      else if (ch === '"') { inQuotes = false; }
+      else { field += ch; }
+    } else {
+      if (ch === '"') { inQuotes = true; }
+      else if (ch === ',') { fields.push(field); field = ''; }
+      else { field += ch; }
+    }
+  }
+  fields.push(field);
+  return fields;
+}
 
 async function loadData() {
   const res   = await fetch(SHEET_URL);
   const text  = await res.text();
   const rows  = text.trim().split(/\r?\n/);
-  const heads = rows.shift().split(',').map(h => h.trim().toLowerCase());
+  const heads = parseCSVRow(rows.shift()).map(h => h.trim().toLowerCase());
   const col   = name => heads.indexOf(name);
 
-  TOURNAMENTS = rows
+  TOURNAMENTS = [];
+  MATCHES = [];
+
+  rows
     .filter(r => r.trim())
-    .map(row => {
-      const parts = row.split(',');
-      const get   = name => (parts[col(name)] || '').trim();
+    .forEach(row => {
+      const parts     = parseCSVRow(row);
+      const get       = name => (parts[col(name)] || '').trim();
       const startDate = get('startdate');
+      const format    = get('format');
+
+      if (format === 'match') {
+        MATCHES.push({
+          name:       get('name'),
+          format:     'match',
+          tournament: get('tournament'),
+          startDate,
+          endDate:    get('enddate') || startDate,
+          country:    get('country'),
+          category:   get('category'),
+        });
+        return;
+      }
+
       const ev = {
         category:  get('category'),
         name:      get('name'),
-        format:    get('format'),
+        format,
         country:   get('country'),
         startDate,
         endDate:   get('enddate') || startDate,
@@ -77,8 +117,13 @@ async function loadData() {
       if (game) ev.game = game;
       if (get('important').toLowerCase() === 'yes') ev.important = true;
       ev.lengthDays = Math.round((new Date(ev.endDate) - new Date(ev.startDate)) / 86400000) + 1;
-      return ev;
+      TOURNAMENTS.push(ev);
     });
+}
+
+function getMatchesForTournament(tournamentName) {
+  const normalized = tournamentName.toLowerCase();
+  return MATCHES.filter(m => m.tournament.toLowerCase() === normalized);
 }
 
 // ============================================================
@@ -880,11 +925,13 @@ function goToToday() {
   if (currentView === 'timeline') {
     scrollToToday();
   } else if (currentView === 'calendar') {
-    const cell = document.querySelector('.cal-month-current');
-    if (cell) cell.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const container = document.getElementById('calendarView');
+    const cell      = container.querySelector('.cal-month-current');
+    if (cell) scrollToEl(container, cell);
   } else if (currentView === 'weekly') {
-    const section = document.querySelector('.week-section.week-current');
-    if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const container = document.getElementById('weeklyMainPanel') || document.getElementById('weeklyView');
+    const section   = container.querySelector('.week-section.week-current');
+    if (section) scrollToEl(container, section);
   }
 }
 
@@ -898,15 +945,26 @@ function scrollToToday() {
 // ============================================================
 //  NAVIGATE TO EVENT (shared by search + header click)
 // ============================================================
+
+// Scroll `container` so `targetEl` sits just below any sticky header inside it.
+function scrollToEl(container, targetEl, smooth = true) {
+  const stickyEl = container.querySelector('.weekly-year-label, .cal-year-label');
+  const stickyH  = stickyEl ? stickyEl.offsetHeight : 0;
+  const cr       = container.getBoundingClientRect();
+  const tr       = targetEl.getBoundingClientRect();
+  const top      = container.scrollTop + (tr.top - cr.top) - stickyH;
+  container.scrollTo({ top: Math.max(0, top), behavior: smooth ? 'smooth' : 'instant' });
+}
+
 function scrollToWeekEvent(ev) {
   const evDate    = new Date(ev.startDate);
-  const container = document.getElementById('weeklyView');
+  const container = document.getElementById('weeklyMainPanel') || document.getElementById('weeklyView');
   const sections  = container.querySelectorAll('.week-section[data-week-start]');
   for (const section of sections) {
     const ws = new Date(section.dataset.weekStart);
     const we = new Date(ws); we.setDate(we.getDate() + 6);
     if (evDate >= ws && evDate <= we) {
-      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      scrollToEl(container, section);
       section.querySelectorAll('.week-event-item').forEach(item => {
         if (item.dataset.evName === ev.name) {
           item.classList.add('week-event-flash');
@@ -919,10 +977,11 @@ function scrollToWeekEvent(ev) {
 }
 
 function scrollToCalendarEvent(ev) {
-  const evDate = new Date(ev.startDate);
-  const cell   = document.querySelector(`.cal-month-cell[data-year-month="${evDate.getFullYear()}-${evDate.getMonth()}"]`);
+  const evDate    = new Date(ev.startDate);
+  const container = document.getElementById('calendarView');
+  const cell      = container.querySelector(`.cal-month-cell[data-year-month="${evDate.getFullYear()}-${evDate.getMonth()}"]`);
   if (!cell) return;
-  cell.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  scrollToEl(container, cell);
   cell.querySelectorAll('.cal-event-item').forEach(item => {
     if (item.dataset.evName === ev.name) {
       item.classList.add('cal-event-flash');
@@ -1181,7 +1240,7 @@ function setView(view) {
     buildCalendarView();
   } else if (view === 'weekly') {
     cwLayout.style.display = 'flex';
-    weeklyEl.style.display = 'block';
+    weeklyEl.style.display = 'flex';
     btnWeekly.classList.add('on');
     buildWeeklyView();
   }
@@ -1194,8 +1253,22 @@ function firstMondayOfYear(year) {
 }
 
 function buildWeeklyView() {
-  const container = document.getElementById('weeklyView');
-  container.innerHTML = '';
+  _activeMatchTournament = null;
+
+  const weeklyView = document.getElementById('weeklyView');
+  weeklyView.innerHTML = '';
+
+  const mainPanel = document.createElement('div');
+  mainPanel.id = 'weeklyMainPanel';
+  mainPanel.className = 'weekly-main-panel';
+  weeklyView.appendChild(mainPanel);
+
+  const matchPanelEl = document.createElement('div');
+  matchPanelEl.id = 'weeklyMatchPanel';
+  matchPanelEl.className = 'weekly-match-panel';
+  weeklyView.appendChild(matchPanelEl);
+
+  const container = mainPanel;
 
   const today      = new Date(); today.setHours(0,0,0,0);
   const startYear  = TIMELINE_START.getFullYear();
@@ -1204,7 +1277,7 @@ function buildWeeklyView() {
 
   for (let year = startYear; year <= endYear; year++) {
     const yearStart = firstMondayOfYear(year);
-    const yearEnd   = firstMondayOfYear(year + 1); // exclusive: first Monday of next year
+    const yearEnd   = firstMondayOfYear(year + 1);
 
     let yearHeaderAdded = false;
     let weekNum = 1;
@@ -1214,9 +1287,7 @@ function buildWeeklyView() {
       const weekEnd = new Date(weekStart);
       weekEnd.setDate(weekEnd.getDate() + 6);
 
-      // Only render weeks that overlap the data range
       if (weekEnd >= TIMELINE_START && weekStart <= TIMELINE_END) {
-        // Add year header before the first visible week of this year
         if (!yearHeaderAdded) {
           const yearLabel = document.createElement('div');
           yearLabel.className = 'weekly-year-label';
@@ -1251,17 +1322,18 @@ function buildWeeklyView() {
           list.className = 'week-event-list';
 
           weekEvents.forEach(ev => {
-            const cat     = effectiveCategory(ev);
-            const iconCls = SPORT_ICONS[cat] || 'fa-solid fa-trophy';
-            const color   = getColor(cat);
-            const isNew   = new Date(ev.startDate) >= weekStart;
+            const cat        = effectiveCategory(ev);
+            const iconCls    = SPORT_ICONS[cat] || 'fa-solid fa-trophy';
+            const color      = getColor(cat);
+            const isNew      = new Date(ev.startDate) >= weekStart;
+            const hasMatches = getMatchesForTournament(ev.name).length > 0;
 
             const item = document.createElement('div');
             item.className   = 'week-event-item' + (isNew ? '' : ' week-event-ongoing');
             item.dataset.evName = ev.name;
 
             const icon = document.createElement('i');
-            icon.className  = iconCls;
+            icon.className   = iconCls;
             icon.style.color = color;
 
             const nameEl = document.createElement('span');
@@ -1276,13 +1348,31 @@ function buildWeeklyView() {
             item.appendChild(nameEl);
             item.appendChild(flagEl);
 
+            if (hasMatches) {
+              const chevron = document.createElement('span');
+              chevron.className = 'match-panel-chevron';
+              chevron.textContent = '›';
+              item.appendChild(chevron);
+            }
+
             item.addEventListener('mouseenter', e => showTooltip(e, ev, color));
             item.addEventListener('mousemove',  moveTooltip);
             item.addEventListener('mouseleave', hideTooltip);
-            item.addEventListener('click', () => {
-              setView('timeline');
-              setTimeout(() => navigateToEvent(ev), 350);
-            });
+
+            if (hasMatches) {
+              item.addEventListener('click', () => {
+                if (_activeMatchTournament === ev.name) {
+                  closeMatchPanel();
+                } else {
+                  buildMatchPanel(ev.name);
+                }
+              });
+            } else {
+              item.addEventListener('click', () => {
+                setView('timeline');
+                setTimeout(() => navigateToEvent(ev), 350);
+              });
+            }
 
             list.appendChild(item);
           });
@@ -1300,12 +1390,175 @@ function buildWeeklyView() {
 
   requestAnimationFrame(() => requestAnimationFrame(() => {
     const current = container.querySelector('.week-section.week-current');
-    if (current) {
-      const cr = container.getBoundingClientRect();
-      const tr = current.getBoundingClientRect();
-      container.scrollTop += tr.top - cr.top;
-    }
+    if (current) scrollToEl(container, current, false);
   }));
+}
+
+// Configurable split ratio — both panels get flex:1 (50/50) by default.
+// To adjust, change the flex values on .weekly-main-panel and .weekly-match-panel in CSS.
+function buildMatchPanel(tournamentName) {
+  const panel = document.getElementById('weeklyMatchPanel');
+  if (!panel) return;
+
+  document.querySelectorAll('.week-event-item.match-active').forEach(el => el.classList.remove('match-active'));
+  _activeMatchTournament = tournamentName;
+  document.querySelectorAll('.week-event-item').forEach(el => {
+    if (el.dataset.evName === tournamentName) el.classList.add('match-active');
+  });
+
+  const matches = getMatchesForTournament(tournamentName);
+  panel.innerHTML = '';
+  panel.classList.add('open');
+
+  const header = document.createElement('div');
+  header.className = 'match-panel-header';
+
+  const titleWrap = document.createElement('div');
+  titleWrap.className = 'match-panel-title-wrap';
+
+  const parentTournament = TOURNAMENTS.find(t => t.name.toLowerCase() === tournamentName.toLowerCase());
+  if (parentTournament) {
+    const flagEl = document.createElement('span');
+    flagEl.className   = 'match-panel-header-flag';
+    flagEl.textContent = getFlag(parentTournament.country);
+    titleWrap.appendChild(flagEl);
+  }
+
+  const title = document.createElement('span');
+  title.className   = 'match-panel-title';
+  title.textContent = tournamentName;
+  titleWrap.appendChild(title);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className   = 'match-panel-close';
+  closeBtn.innerHTML   = '&times;';
+  closeBtn.title       = 'Close';
+  closeBtn.addEventListener('click', closeMatchPanel);
+
+  header.appendChild(titleWrap);
+
+  if (parentTournament) {
+    const today    = new Date(); today.setHours(0, 0, 0, 0);
+    const endDate  = parseLocalDate(parentTournament.endDate);
+    const daysLeft = Math.round((endDate - today) / 86400000);
+    let daysStr = '';
+    if (daysLeft > 0)       daysStr = ` · ${daysLeft} days left`;
+    else if (daysLeft === 0) daysStr = ' · ends today';
+
+    const meta = document.createElement('div');
+    meta.className   = 'match-panel-meta';
+    meta.textContent = `Runs ${fmtDate(parentTournament.startDate)} – ${fmtDate(parentTournament.endDate)}${daysStr}`;
+    header.appendChild(meta);
+  }
+
+  header.appendChild(closeBtn);
+  panel.appendChild(header);
+
+  const content = document.createElement('div');
+  content.className = 'match-panel-content';
+
+  let scrollTarget = null;
+
+  if (matches.length === 0) {
+    const empty = document.createElement('div');
+    empty.className   = 'match-panel-empty';
+    empty.textContent = 'No matches found.';
+    content.appendChild(empty);
+  } else {
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const today   = new Date(); today.setHours(0, 0, 0, 0);
+
+    // Group by Mon–Sun week
+    const weekMap = new Map();
+    matches.forEach(m => {
+      const d   = parseLocalDate(m.startDate);
+      const day = d.getDay();
+      const mon = new Date(d);
+      mon.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
+      const key = `${mon.getFullYear()}-${String(mon.getMonth()+1).padStart(2,'0')}-${String(mon.getDate()).padStart(2,'0')}`;
+      if (!weekMap.has(key)) weekMap.set(key, { mon, items: [] });
+      weekMap.get(key).items.push(m);
+    });
+
+    let weekNum = 0;
+    let firstSection = null;
+
+    [...weekMap.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .forEach(([, { mon, items }]) => {
+        weekNum++;
+        const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
+        const isCurrentWeek = today >= mon && today <= sun;
+        const isUpcoming    = mon > today;
+        const isPastWeek    = sun < today;
+
+        const section = document.createElement('div');
+        section.className = 'match-week-section' + (isCurrentWeek ? ' match-week-current' : '') + (isPastWeek ? ' match-week-past' : '');
+
+        const wHdr = document.createElement('div');
+        wHdr.className = 'match-week-header';
+
+        const numLabel = document.createElement('span');
+        numLabel.className   = 'match-week-num';
+        numLabel.textContent = `Week ${weekNum}`;
+
+        const dateLabel = document.createElement('span');
+        dateLabel.className   = 'match-week-dates';
+        dateLabel.textContent = `${mon.getDate()} ${MONTHS[mon.getMonth()]} – ${sun.getDate()} ${MONTHS[sun.getMonth()]}`;
+
+        wHdr.appendChild(numLabel);
+        wHdr.appendChild(dateLabel);
+        section.appendChild(wHdr);
+
+        items
+          .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.name.localeCompare(b.name))
+          .forEach(m => {
+            const item = document.createElement('div');
+            item.className = 'match-item';
+
+            const nameEl = document.createElement('span');
+            nameEl.className   = 'match-item-name';
+            nameEl.textContent = m.name;
+
+            const md     = parseLocalDate(m.startDate);
+            const dateEl = document.createElement('span');
+            dateEl.className   = 'match-item-date';
+            dateEl.textContent = `${md.getDate()} ${MONTHS[md.getMonth()]}`;
+
+            item.appendChild(dateEl);
+            item.appendChild(nameEl);
+            section.appendChild(item);
+          });
+
+        content.appendChild(section);
+
+        if (!firstSection) firstSection = section;
+        if (!scrollTarget && (isCurrentWeek || isUpcoming)) scrollTarget = section;
+      });
+
+    // Tournament finished — scroll to first week
+    if (!scrollTarget) scrollTarget = firstSection;
+  }
+
+  panel.appendChild(content);
+
+  if (scrollTarget) {
+    requestAnimationFrame(() => {
+      const cr = content.getBoundingClientRect();
+      const tr = scrollTarget.getBoundingClientRect();
+      content.scrollTop += tr.top - cr.top;
+    });
+  }
+}
+
+function closeMatchPanel() {
+  _activeMatchTournament = null;
+  const panel = document.getElementById('weeklyMatchPanel');
+  if (panel) {
+    panel.classList.remove('open');
+    panel.innerHTML = '';
+  }
+  document.querySelectorAll('.week-event-item.match-active').forEach(el => el.classList.remove('match-active'));
 }
 
 function navigateToWeekForEvent(ev) {
@@ -1336,6 +1589,7 @@ function buildCalendarView() {
       const monthStart = new Date(year, m, 1);
       const monthEnd   = new Date(year, m + 1, 0);
       const isCurrent  = today >= monthStart && today <= monthEnd;
+      const isPast     = monthEnd < today;
 
       const monthEvents = getFilteredTournaments()
         .filter(ev => {
@@ -1346,7 +1600,7 @@ function buildCalendarView() {
         .sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
 
       const cell = document.createElement('div');
-      cell.className = 'cal-month-cell' + (isCurrent ? ' cal-month-current' : '');
+      cell.className = 'cal-month-cell' + (isCurrent ? ' cal-month-current' : '') + (isPast ? ' cal-month-past' : '');
       cell.dataset.yearMonth = `${year}-${m}`;
 
       const mHeader = document.createElement('div');
@@ -1392,7 +1646,7 @@ function buildCalendarView() {
 
   requestAnimationFrame(() => requestAnimationFrame(() => {
     const current = container.querySelector('.cal-month-current');
-    if (current) current.scrollIntoView({ block: 'start' });
+    if (current) scrollToEl(container, current, false);
   }));
 }
 
