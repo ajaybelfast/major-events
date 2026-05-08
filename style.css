@@ -1137,11 +1137,11 @@ body {
 }
 
 .week-event-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 280px) 32px 60px 60px 72px 140px;
   align-items: center;
-  gap: 10px;
+  column-gap: 14px;
   padding: 5px 24px 5px 28px;
-  cursor: pointer;
   border-left: 3px solid transparent;
   transition: background 0.1s;
 }
@@ -1150,7 +1150,6 @@ body {
 
 .week-event-item i {
   font-size: 13px;
-  flex-shrink: 0;
   width: 14px;
   text-align: center;
 }
@@ -1158,7 +1157,10 @@ body {
 .week-event-name {
   font-size: 13px;
   color: #c9d1d9;
-  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 /* Ongoing events (started a previous week) appear slightly dimmed */
@@ -1168,8 +1170,28 @@ body {
 .week-event-flag {
   font-size: 21px;
   line-height: 1;
-  flex-shrink: 0;
 }
+
+.week-event-date {
+  font-size: 12px;
+  color: #8b949e;
+  font-variant-numeric: tabular-nums;
+}
+
+.week-event-duration {
+  font-size: 12px;
+  color: #8b949e;
+  font-variant-numeric: tabular-nums;
+}
+
+.match-panel-link {
+  font-size: 12px;
+  color: #58a6ff;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.match-panel-link:hover { text-decoration: underline; }
 
 @keyframes week-flash {
   0%   { background: transparent; }

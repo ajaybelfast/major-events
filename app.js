@@ -776,10 +776,14 @@ function fmtDate(d) {
 }
 
 function showTooltip(e, ev, color) {
+  const countries = parseCountries(ev.country);
+  const countryRows = (countries.length ? countries : [ev.country]).map(c =>
+    `<div class="tt-row"><span style="font-size:24px">${getFlag(c)}</span>&nbsp;${c}</div>`
+  ).join('');
   tooltip.innerHTML = `
     <div class="tt-sport" style="color:${color}">${effectiveCategory(ev)}</div>
     <div class="tt-name">${ev.name}</div>
-    <div class="tt-row"><span style="font-size:24px">${getFlag(ev.country)}</span>&nbsp;${ev.country}</div>
+    ${countryRows}
     <div class="tt-row">📅&nbsp;${fmtDate(ev.startDate)} – ${fmtDate(ev.endDate)}</div>
     <div class="tt-row">⏱&nbsp;${ev.lengthDays} day${ev.lengthDays !== 1 ? 's' : ''}</div>
   `;
@@ -1212,6 +1216,7 @@ function rebuildCwView() {
 
 function setView(view) {
   currentView = view;
+  try { localStorage.setItem('mjr_view', view); } catch {}
   const mainEl    = document.getElementById('mainView');
   const cwLayout  = document.getElementById('cwLayout');
   const calEl     = document.getElementById('calendarView');
@@ -1274,6 +1279,7 @@ function buildWeeklyView() {
   const startYear  = TIMELINE_START.getFullYear();
   const endYear    = TIMELINE_END.getFullYear();
   const MONTHS     = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const fmtDate    = d => `${d.getDate()} ${MONTHS[d.getMonth()]}`;
 
   for (let year = startYear; year <= endYear; year++) {
     const yearStart = firstMondayOfYear(year);
@@ -1327,6 +1333,9 @@ function buildWeeklyView() {
             const color      = getColor(cat);
             const isNew      = new Date(ev.startDate) >= weekStart;
             const hasMatches = getMatchesForTournament(ev.name).length > 0;
+            const startD     = parseLocalDate(ev.startDate);
+            const endD       = parseLocalDate(ev.endDate);
+            const durDays    = ev.lengthDays || (Math.round((endD - startD) / 86400000) + 1);
 
             const item = document.createElement('div');
             item.className   = 'week-event-item' + (isNew ? '' : ' week-event-ongoing');
@@ -1344,34 +1353,40 @@ function buildWeeklyView() {
             flagEl.className   = 'week-event-flag';
             flagEl.textContent = getFlag(ev.country);
 
+            const startEl = document.createElement('span');
+            startEl.className   = 'week-event-date';
+            startEl.textContent = fmtDate(startD);
+
+            const endEl = document.createElement('span');
+            endEl.className   = 'week-event-date';
+            endEl.textContent = fmtDate(endD);
+
+            const durEl = document.createElement('span');
+            durEl.className   = 'week-event-duration';
+            durEl.textContent = `${durDays} day${durDays !== 1 ? 's' : ''}`;
+
             item.appendChild(icon);
             item.appendChild(nameEl);
             item.appendChild(flagEl);
+            item.appendChild(startEl);
+            item.appendChild(endEl);
+            item.appendChild(durEl);
 
             if (hasMatches) {
-              const chevron = document.createElement('span');
-              chevron.className = 'match-panel-chevron';
-              chevron.textContent = '›';
-              item.appendChild(chevron);
-            }
-
-            item.addEventListener('mouseenter', e => showTooltip(e, ev, color));
-            item.addEventListener('mousemove',  moveTooltip);
-            item.addEventListener('mouseleave', hideTooltip);
-
-            if (hasMatches) {
-              item.addEventListener('click', () => {
+              item.classList.add('has-matches');
+              const link = document.createElement('a');
+              link.className   = 'match-panel-link';
+              link.href        = '#';
+              link.textContent = 'Matches loaded ›';
+              link.addEventListener('click', e => {
+                e.preventDefault();
                 if (_activeMatchTournament === ev.name) {
                   closeMatchPanel();
                 } else {
                   buildMatchPanel(ev.name);
                 }
               });
-            } else {
-              item.addEventListener('click', () => {
-                setView('timeline');
-                setTimeout(() => navigateToEvent(ev), 350);
-              });
+              item.appendChild(link);
             }
 
             list.appendChild(item);
@@ -1658,9 +1673,13 @@ function initKeyboardShortcuts() {
     const inInput = document.activeElement.tagName === 'INPUT' ||
                     document.activeElement.tagName === 'TEXTAREA';
 
-    // Escape: close search results if open, otherwise scroll to start (like logo click)
+    // Escape: close the weekly match panel if open, otherwise scroll to start (like logo click)
     if (e.key === 'Escape' && !inInput) {
-      scrollToStart();
+      if (currentView === 'weekly' && _activeMatchTournament) {
+        closeMatchPanel();
+      } else {
+        scrollToStart();
+      }
       return;
     }
 
@@ -1702,6 +1721,11 @@ async function init() {
       document.querySelector('.sidebar').classList.add('collapsed');
     }
     requestAnimationFrame(scrollToToday);
+    let savedView = null;
+    try { savedView = localStorage.getItem('mjr_view'); } catch {}
+    if (savedView === 'calendar' || savedView === 'weekly') {
+      setView(savedView);
+    }
   } catch (err) {
     console.error('Failed to load tournament data:', err);
     document.getElementById('sidebarRows').innerHTML =

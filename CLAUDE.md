@@ -16,7 +16,7 @@ python3 -m http.server 8080
 Single-page vanilla JS app. No framework, no bundler, no dependencies beyond Font Awesome (CDN).
 
 **File roles:**
-- `data.js` — global constants only: `SPORT_COLORS`, `SPORT_ICONS`, `ESPORTS_LOGOS`, `getFlag()`. Loaded first so app.js can reference these globals. Also contains a `_TOURNAMENTS_REMOVED` legacy array (unused at runtime).
+- `data.js` — global constants only: `SPORT_COLORS`, `SPORT_ICONS`, `ESPORTS_LOGOS`, `getFlag()`. Loaded first so app.js can reference these globals.
 - `app.js` — all application logic: data fetching, view rendering, filtering, sorting, search, scroll behaviour.
 - `style.css` — all styling for all three views.
 - `index.html` — static markup shell. Both view containers (`#mainView` for timeline, `#cwLayout` for calendar/weekly) are always in the DOM; `setView()` shows/hides them.
