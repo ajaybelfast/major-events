@@ -679,7 +679,24 @@ function buildTimelineRows() {
         border-left:3px solid #444c56;
         z-index:${10 + laneIdx};
       `;
-      if (isCountryView) {
+
+      // Decide up-front whether the bar will get a today-sticker label, so the
+      // in-bar label can be suppressed to avoid showing the name twice.
+      let willShowTodayLabel = false;
+      let todayPxCached = 0;
+      const todayPx = dayOffset(new Date().toISOString().split('T')[0]) * DAY_PX;
+      if (startPx < todayPx && startPx + widthPx > todayPx) {
+        const remainingW = startPx + widthPx - todayPx;
+        const approxMinW = ev.name.length * 6.5 + 44; // flag + text + padding estimate
+        if (remainingW >= approxMinW) {
+          willShowTodayLabel = true;
+          todayPxCached = todayPx;
+        }
+      }
+
+      if (willShowTodayLabel) {
+        // Today-sticker handles the label entirely; leave the bar's left edge empty.
+      } else if (isCountryView) {
         const iconCls = SPORT_ICONS[effectiveCategory(ev)] || 'fa-solid fa-trophy';
         if (widthPx >= 58) {
           bar.innerHTML = `<i class="${iconCls} bar-flag" style="font-size:13px"></i><span class="bar-text">${ev.name}</span>`;
@@ -694,27 +711,19 @@ function buildTimelineRows() {
           bar.innerHTML = `<span class="bar-flag">${flag}</span>`;
         }
       }
-    }
 
-    // If bar spans today, show name anchored at today line when left label is off-screen
-    if (!isEvent) {
-      const todayPx = dayOffset(new Date().toISOString().split('T')[0]) * DAY_PX;
-      if (startPx < todayPx && startPx + widthPx > todayPx) {
-        const remainingW  = startPx + widthPx - todayPx;
-        const approxMinW  = ev.name.length * 6.5 + 44; // flag + text + padding estimate
-        if (remainingW >= approxMinW) {
-          const offsetInBar = todayPx - startPx;
-          const todayLabel  = document.createElement('div');
-          todayLabel.className  = 'bar-today-label';
-          todayLabel.style.left = (offsetInBar + 8) + 'px';
-          if (isCountryView) {
-            const iconCls = SPORT_ICONS[effectiveCategory(ev)] || 'fa-solid fa-trophy';
-            todayLabel.innerHTML = `<i class="${iconCls}" style="font-size:13px;flex-shrink:0"></i><span class="bar-text">${ev.name}</span>`;
-          } else {
-            todayLabel.innerHTML = `<span class="bar-flag">${getFlag(ev.country)}</span><span class="bar-text">${ev.name}</span>`;
-          }
-          bar.appendChild(todayLabel);
+      if (willShowTodayLabel) {
+        const offsetInBar = todayPxCached - startPx;
+        const todayLabel  = document.createElement('div');
+        todayLabel.className  = 'bar-today-label';
+        todayLabel.style.left = (offsetInBar + 8) + 'px';
+        if (isCountryView) {
+          const iconCls = SPORT_ICONS[effectiveCategory(ev)] || 'fa-solid fa-trophy';
+          todayLabel.innerHTML = `<i class="${iconCls}" style="font-size:13px;flex-shrink:0"></i><span class="bar-text">${ev.name}</span>`;
+        } else {
+          todayLabel.innerHTML = `<span class="bar-flag">${getFlag(ev.country)}</span><span class="bar-text">${ev.name}</span>`;
         }
+        bar.appendChild(todayLabel);
       }
     }
 
@@ -954,9 +963,12 @@ function scrollToToday() {
 function scrollToEl(container, targetEl, smooth = true) {
   const stickyEl = container.querySelector('.weekly-year-label, .cal-year-label');
   const stickyH  = stickyEl ? stickyEl.offsetHeight : 0;
+  // Sticky elements pin to the container's padding-box top, so the container's
+  // own padding-top sits above the sticky's stuck position. Subtract both.
+  const padTop   = parseFloat(getComputedStyle(container).paddingTop) || 0;
   const cr       = container.getBoundingClientRect();
   const tr       = targetEl.getBoundingClientRect();
-  const top      = container.scrollTop + (tr.top - cr.top) - stickyH;
+  const top      = container.scrollTop + (tr.top - cr.top) - stickyH - padTop;
   container.scrollTo({ top: Math.max(0, top), behavior: smooth ? 'smooth' : 'instant' });
 }
 
@@ -1279,7 +1291,7 @@ function buildWeeklyView() {
   const startYear  = TIMELINE_START.getFullYear();
   const endYear    = TIMELINE_END.getFullYear();
   const MONTHS     = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const fmtDate    = d => `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  const fmtDate    = d => `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 
   for (let year = startYear; year <= endYear; year++) {
     const yearStart = firstMondayOfYear(year);

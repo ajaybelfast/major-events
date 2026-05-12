@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(open *)",
-      "Bash(python3 *)"
+      "Bash(python3 *)",
+      "Bash(grep -nB1 -A3 \"weekly-view\\\\|weekly-main-panel\\\\|weekly-year-label\" /Users/a.sharma/Documents/Projects/MajorTournaments/style.css)"
     ]
   }
 }

@@ -220,9 +220,19 @@ body {
 }
 
 .sidebar.collapsed .category-label,
-.sidebar.collapsed .status-now,
 .sidebar.collapsed .status-soon {
   display: none;
+}
+
+/* When sidebar is collapsed, keep the pulsing live-dot but hide the "NOW" text.
+   Positioned as a badge in the top-right corner of the row. */
+.sidebar.collapsed .status-now {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  margin: 0;
+  font-size: 0;
+  gap: 0;
 }
 
 .sidebar-header {
@@ -502,6 +512,7 @@ body {
   gap: 9px;
   border-bottom: 1px solid #21262d;
   border-left: 3px solid transparent;
+  position: relative;
 }
 
 .sidebar-row:nth-child(even) {
@@ -1138,7 +1149,7 @@ body {
 
 .week-event-item {
   display: grid;
-  grid-template-columns: 18px minmax(0, 280px) 32px 60px 60px 72px 140px;
+  grid-template-columns: 18px minmax(0, 280px) 32px 84px 84px 72px 140px;
   align-items: center;
   column-gap: 14px;
   padding: 5px 24px 5px 28px;
