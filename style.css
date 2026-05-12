@@ -1025,13 +1025,13 @@ body {
 }
 
 .cal-month-past {
-  background: #090d12;
+  background: #262b32;
 }
 
 .cal-month-past .cal-month-header {
-  color: #30363d;
-  background: #0d1117;
-  border-bottom-color: #1c2229;
+  color: #8b949e;
+  background: #2d333b;
+  border-bottom-color: #30363d;
 }
 
 .cal-event-list {
@@ -1043,21 +1043,24 @@ body {
 }
 
 .cal-event-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 7px;
+  display: grid;
+  grid-template-columns: 14px 16px 1fr;
+  align-items: start;
+  column-gap: 6px;
   padding: 3px 5px;
+  padding-right: 16px;
   border-radius: 4px;
   cursor: pointer;
   transition: background 0.1s;
+  position: relative;
 }
 
 .cal-event-item:hover { background: #21262d; }
 
-.cal-event-item i {
+.cal-event-item > i {
   font-size: 12px;
   margin-top: 2px;
-  flex-shrink: 0;
+  justify-self: center;
 }
 
 .cal-event-name {
@@ -1068,6 +1071,22 @@ body {
 
 .cal-event-important .cal-event-name {
   color: #F7C948;
+}
+
+/* Rows in past months are dimmed so finished months read as completed */
+.cal-month-past .cal-event-item { opacity: 0.6; }
+.cal-month-past .cal-event-name { color: #8b949e; }
+
+.cal-event-live::after {
+  content: '';
+  position: absolute;
+  right: 5px;
+  top: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3fb950;
+  animation: pulse-dot 1.4s ease-in-out infinite;
 }
 
 /* ── Weekly View ─────────────────────────────────────────── */
@@ -1143,19 +1162,30 @@ body {
   color: #388bfd;
 }
 
+.week-section.week-past {
+  background: #262b32;
+}
+
+.week-section.week-past .week-header {
+  background: #2d333b;
+}
+
 .week-event-list {
   padding: 2px 0 5px;
 }
 
 .week-event-item {
   display: grid;
-  grid-template-columns: 18px minmax(0, 280px) 32px 84px 84px 72px 140px;
+  grid-template-columns: 18px minmax(0, 280px) 32px 84px 84px 72px 140px 14px;
   align-items: center;
   column-gap: 14px;
   padding: 5px 24px 5px 28px;
   border-left: 3px solid transparent;
   transition: background 0.1s;
 }
+
+/* tighten only the icon→name gap so the start-marker sits evenly between them */
+.week-event-item > i:first-child + .week-event-name { margin-left: -8px; }
 
 .week-event-item:hover { background: #161b22; }
 
@@ -1174,9 +1204,41 @@ body {
   min-width: 0;
 }
 
-/* Ongoing events (started a previous week) appear slightly dimmed */
-.week-event-ongoing { opacity: 0.6; }
-.week-event-ongoing .week-event-name { color: #8b949e; }
+/* Rows in past weeks are dimmed so finished weeks read as completed */
+.week-section.week-past .week-event-item { opacity: 0.6; }
+.week-section.week-past .week-event-name { color: #8b949e; }
+
+.week-event-important .week-event-name { color: #F7C948; }
+
+/* Marker shown on the row where a multi-week/multi-month event first starts */
+.start-marker-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  vertical-align: -1px;
+  line-height: 1;
+}
+
+.start-marker {
+  font-size: 11px;
+  color: #58a6ff;
+}
+
+.end-marker {
+  font-size: 11px;
+  color: #f85149;
+}
+
+.cal-event-item .start-marker-slot {
+  margin-top: 2px;
+  justify-self: center;
+}
+
+.week-event-name .start-marker-slot {
+  justify-content: flex-start;
+  margin-right: 6px;
+}
 
 .week-event-flag {
   font-size: 21px;
@@ -1203,6 +1265,15 @@ body {
 }
 
 .match-panel-link:hover { text-decoration: underline; }
+
+.week-event-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3fb950;
+  justify-self: center;
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}
 
 @keyframes week-flash {
   0%   { background: transparent; }

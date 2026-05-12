@@ -1315,6 +1315,7 @@ function buildWeeklyView() {
         }
 
         const isCurrentWeek = today >= weekStart && today <= weekEnd;
+        const isPastWeek    = weekEnd < today;
 
         const weekEvents = getFilteredTournaments()
           .filter(ev => {
@@ -1325,7 +1326,7 @@ function buildWeeklyView() {
           .sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
 
         const section = document.createElement('div');
-        section.className = 'week-section' + (isCurrentWeek ? ' week-current' : '');
+        section.className = 'week-section' + (isCurrentWeek ? ' week-current' : '') + (isPastWeek ? ' week-past' : '');
         section.dataset.weekStart = weekStart.toISOString().split('T')[0];
 
         const hdr = document.createElement('div');
@@ -1343,14 +1344,20 @@ function buildWeeklyView() {
             const cat        = effectiveCategory(ev);
             const iconCls    = SPORT_ICONS[cat] || 'fa-solid fa-trophy';
             const color      = getColor(cat);
-            const isNew      = new Date(ev.startDate) >= weekStart;
             const hasMatches = getMatchesForTournament(ev.name).length > 0;
             const startD     = parseLocalDate(ev.startDate);
             const endD       = parseLocalDate(ev.endDate);
             const durDays    = ev.lengthDays || (Math.round((endD - startD) / 86400000) + 1);
+            const isLive     = today >= startD && today <= endD;
+            const isStartHere = startD >= weekStart && startD <= weekEnd;
+            const isEndHere   = endD   >= weekStart && endD   <= weekEnd;
+            const spansMulti  = !(isStartHere && isEndHere); // both in same week ⇒ single-week event
+            const showStart   = isStartHere && spansMulti;
+            const showEnd     = isEndHere   && spansMulti;
 
             const item = document.createElement('div');
-            item.className   = 'week-event-item' + (isNew ? '' : ' week-event-ongoing');
+            item.className   = 'week-event-item'
+              + (ev.important ? ' week-event-important' : '');
             item.dataset.evName = ev.name;
 
             const icon = document.createElement('i');
@@ -1359,7 +1366,21 @@ function buildWeeklyView() {
 
             const nameEl = document.createElement('span');
             nameEl.className   = 'week-event-name';
-            nameEl.textContent = ev.name;
+            const weekMarkerSlot = document.createElement('span');
+            weekMarkerSlot.className = 'start-marker-slot';
+            if (showStart) {
+              const m = document.createElement('i');
+              m.className = 'fa-solid fa-circle-play start-marker';
+              m.title     = 'Starts this week';
+              weekMarkerSlot.appendChild(m);
+            } else if (showEnd) {
+              const m = document.createElement('i');
+              m.className = 'fa-solid fa-circle-xmark end-marker';
+              m.title     = 'Ends this week';
+              weekMarkerSlot.appendChild(m);
+            }
+            nameEl.appendChild(weekMarkerSlot);
+            nameEl.appendChild(document.createTextNode(ev.name));
 
             const flagEl = document.createElement('span');
             flagEl.className   = 'week-event-flag';
@@ -1399,6 +1420,16 @@ function buildWeeklyView() {
                 }
               });
               item.appendChild(link);
+            } else {
+              item.appendChild(document.createElement('span')); // placeholder so grid columns stay aligned
+            }
+
+            if (isLive) {
+              const dot = document.createElement('span');
+              dot.className = 'week-event-live-dot';
+              item.appendChild(dot);
+            } else {
+              item.appendChild(document.createElement('span'));
             }
 
             list.appendChild(item);
@@ -1642,20 +1673,45 @@ function buildCalendarView() {
         const cat     = effectiveCategory(ev);
         const iconCls = SPORT_ICONS[cat] || 'fa-solid fa-trophy';
         const color   = getColor(cat);
+        const startD  = parseLocalDate(ev.startDate);
+        const endD    = parseLocalDate(ev.endDate);
+        const isLive  = today >= startD && today <= endD;
+        const isStartHere = startD >= monthStart && startD <= monthEnd;
+        const isEndHere   = endD   >= monthStart && endD   <= monthEnd;
+        const spansMulti  = !(isStartHere && isEndHere); // both in same month ⇒ single-month event
+        const showStart   = isStartHere && spansMulti;
+        const showEnd     = isEndHere   && spansMulti;
 
         const item = document.createElement('div');
-        item.className = 'cal-event-item' + (ev.important ? ' cal-event-important' : '');
+        item.className = 'cal-event-item'
+          + (ev.important ? ' cal-event-important' : '')
+          + (isLive ? ' cal-event-live' : '');
         item.dataset.evName = ev.name;
 
         const icon = document.createElement('i');
         icon.className = iconCls;
         icon.style.color = color;
 
+        const calMarkerSlot = document.createElement('span');
+        calMarkerSlot.className = 'start-marker-slot';
+        if (showStart) {
+          const m = document.createElement('i');
+          m.className = 'fa-solid fa-circle-play start-marker';
+          m.title     = 'Starts this month';
+          calMarkerSlot.appendChild(m);
+        } else if (showEnd) {
+          const m = document.createElement('i');
+          m.className = 'fa-solid fa-circle-xmark end-marker';
+          m.title     = 'Ends this month';
+          calMarkerSlot.appendChild(m);
+        }
+
         const name = document.createElement('span');
         name.className   = 'cal-event-name';
         name.textContent = ev.name;
 
         item.appendChild(icon);
+        item.appendChild(calMarkerSlot);
         item.appendChild(name);
 
         item.addEventListener('mouseenter', e => showTooltip(e, ev, color));
@@ -1746,3 +1802,54 @@ async function init() {
 }
 
 init();
+
+// ============================================================
+//  AUTO-REFRESH
+// ============================================================
+// Designed for unattended displays (e.g. meeting room screens) where the page is
+// never reloaded. Every REFRESH_MS we re-fetch the sheet so new events appear,
+// and re-render the views so the "today" marker, live indicators, past-week
+// dimming, etc. stay accurate across midnight. Scroll positions are preserved
+// so a viewer sees no visible jump.
+const REFRESH_MS = 15 * 60 * 1000; // 15 minutes
+
+async function refreshAll() {
+  const tw = document.querySelector('.timeline-wrapper');
+  const cv = document.getElementById('calendarView');
+  const wm = document.getElementById('weeklyMainPanel');
+  const sr = document.getElementById('sidebarRows');
+  const scrolls = {
+    timelineX: tw ? tw.scrollLeft : 0,
+    timelineY: tw ? tw.scrollTop  : 0,
+    calendar:  cv ? cv.scrollTop  : 0,
+    weekly:    wm ? wm.scrollTop  : 0,
+    sidebar:   sr ? sr.scrollTop  : 0,
+  };
+
+  try {
+    await loadData();
+    computeTimelineBounds();
+    buildData();
+    buildMonthHeaders();
+    buildSidebar();
+    buildTimelineRows();
+    buildCwSidebar();
+    if (currentView === 'calendar')      buildCalendarView();
+    else if (currentView === 'weekly')   buildWeeklyView();
+
+    requestAnimationFrame(() => {
+      const tw2 = document.querySelector('.timeline-wrapper');
+      const cv2 = document.getElementById('calendarView');
+      const wm2 = document.getElementById('weeklyMainPanel');
+      const sr2 = document.getElementById('sidebarRows');
+      if (tw2) { tw2.scrollLeft = scrolls.timelineX; tw2.scrollTop = scrolls.timelineY; }
+      if (cv2)   cv2.scrollTop  = scrolls.calendar;
+      if (wm2)   wm2.scrollTop  = scrolls.weekly;
+      if (sr2)   sr2.scrollTop  = scrolls.sidebar;
+    });
+  } catch (err) {
+    console.error('Auto-refresh failed:', err);
+  }
+}
+
+setInterval(refreshAll, REFRESH_MS);
