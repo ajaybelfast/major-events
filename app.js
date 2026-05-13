@@ -48,7 +48,9 @@ function parseLocalDate(str) {
 // ============================================================
 //  DATA SOURCE
 // ============================================================
-const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSfVuGE4L38QC5CVV9zc3AN-vZ8Pi0ka7ieO10gpPZVq4bDYqoK41kUNaSxoKbGpmnEuwubg_Ln_mdE/pub?output=csv';
+const SHEET_BASE = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSfVuGE4L38QC5CVV9zc3AN-vZ8Pi0ka7ieO10gpPZVq4bDYqoK41kUNaSxoKbGpmnEuwubg_Ln_mdE/pub';
+const SHEET_URL_TOURNAMENTS = `${SHEET_BASE}?gid=718549522&single=true&output=csv`;
+const SHEET_URL_MATCHES     = `${SHEET_BASE}?gid=531923703&single=true&output=csv`;
 
 let TOURNAMENTS = [];
 let MATCHES = [];
@@ -74,51 +76,59 @@ function parseCSVRow(line) {
   return fields;
 }
 
-async function loadData() {
-  const res   = await fetch(SHEET_URL);
+async function fetchSheet(url) {
+  const res   = await fetch(url);
   const text  = await res.text();
   const rows  = text.trim().split(/\r?\n/);
   const heads = parseCSVRow(rows.shift()).map(h => h.trim().toLowerCase());
   const col   = name => heads.indexOf(name);
-
-  TOURNAMENTS = [];
-  MATCHES = [];
-
-  rows
+  return rows
     .filter(r => r.trim())
-    .forEach(row => {
-      const parts     = parseCSVRow(row);
-      const get       = name => (parts[col(name)] || '').trim();
-      const startDate = get('startdate');
-      const format    = get('format');
-
-      if (format === 'match') {
-        MATCHES.push({
-          name:       get('name'),
-          format:     'match',
-          tournament: get('tournament'),
-          startDate,
-          endDate:    get('enddate') || startDate,
-          country:    get('country'),
-          category:   get('category'),
-        });
-        return;
-      }
-
-      const ev = {
-        category:  get('category'),
-        name:      get('name'),
-        format,
-        country:   get('country'),
-        startDate,
-        endDate:   get('enddate') || startDate,
-      };
-      const game = get('game');
-      if (game) ev.game = game;
-      if (get('important').toLowerCase() === 'yes') ev.important = true;
-      ev.lengthDays = Math.round((new Date(ev.endDate) - new Date(ev.startDate)) / 86400000) + 1;
-      TOURNAMENTS.push(ev);
+    .map(row => {
+      const parts = parseCSVRow(row);
+      return name => (parts[col(name)] || '').trim();
     });
+}
+
+async function loadData() {
+  const [tournamentRows, matchRows] = await Promise.all([
+    fetchSheet(SHEET_URL_TOURNAMENTS),
+    fetchSheet(SHEET_URL_MATCHES).catch(err => {
+      console.error('Failed to load Matches tab:', err);
+      return [];
+    }),
+  ]);
+
+  TOURNAMENTS = tournamentRows.map(get => {
+    const startDate = get('startdate');
+    const endDate   = get('enddate') || startDate;
+    const ev = {
+      category:  get('category'),
+      name:      get('name'),
+      format:    get('format'),
+      country:   get('country'),
+      startDate,
+      endDate,
+    };
+    const subCategory = get('sub-category');
+    if (subCategory) ev.subCategory = subCategory;
+    if (get('important').toLowerCase() === 'yes') ev.important = true;
+    ev.lengthDays = Math.round((new Date(endDate) - new Date(startDate)) / 86400000) + 1;
+    return ev;
+  });
+
+  MATCHES = matchRows.map(get => {
+    const startDate = get('startdate');
+    return {
+      name:       get('name'),
+      format:     'match',
+      tournament: get('tournament'),
+      startDate,
+      endDate:    get('enddate') || startDate,
+      country:    get('country'),
+      category:   get('category'),
+    };
+  });
 }
 
 function getMatchesForTournament(tournamentName) {
@@ -132,7 +142,7 @@ function getMatchesForTournament(tournamentName) {
 
 // Esports entries carry a `game` field — use "Esports (game)" as the row key
 function effectiveCategory(ev) {
-  return ev.game ? `${ev.category} (${ev.game})` : ev.category;
+  return ev.subCategory ? `${ev.category} (${ev.subCategory})` : ev.category;
 }
 
 let catData = [];

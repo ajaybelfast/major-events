@@ -24,7 +24,7 @@ Single-page vanilla JS app. No framework, no bundler, no dependencies beyond Fon
 
 **Data source:** Tournament data is fetched at runtime from a published Google Sheets CSV (`SHEET_URL` in app.js). Edit the sheet to add/update events — do not edit `data.js` for tournament data.
 
-**Data shape:** Each CSV row produces either a `TOURNAMENTS[]` entry or a `MATCHES[]` entry (when `format === 'match'`). Key `format` values: `tournament`, `season`, `event`, `race`, `onedayevent`, `match`. The `match` format is excluded from `TOURNAMENTS` and linked to a parent tournament by name. Esports rows carry a `game` field; `effectiveCategory(ev)` returns `"Esports (game)"` for these.
+**Data shape:** Each CSV row produces either a `TOURNAMENTS[]` entry or a `MATCHES[]` entry (when `format === 'match'`). Key `format` values: `tournament`, `season`, `event`, `race`, `onedayevent`, `match`. The `match` format is excluded from `TOURNAMENTS` and linked to a parent tournament by name. Rows may carry a `sub-category` field (e.g. Esports games like "VALORANT"); `effectiveCategory(ev)` returns `"Category (sub-category)"` for these.
 
 ## Three views
 
