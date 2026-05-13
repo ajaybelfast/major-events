@@ -1413,6 +1413,10 @@ body {
 .match-week-section.match-week-past .match-item-date  { color: #30363d; }
 .match-week-section.match-week-past .match-item { border-bottom-color: #1c2229; }
 
+/* Individual past match (date < today) within the current week */
+.match-item.match-item-past .match-item-name { color: #484f58; }
+.match-item.match-item-past .match-item-date { color: #30363d; }
+
 .match-item {
   display: flex;
   align-items: center;
@@ -1420,9 +1424,28 @@ body {
   gap: 12px;
   padding: 7px 20px;
   border-bottom: 1px solid #21262d;
+  border-left: 3px solid transparent;
 }
 
 .match-item:last-child { border-bottom: none; }
+
+.match-item.match-item-today {
+  background: rgba(63, 185, 80, 0.10);
+  border-left-color: #3fb950;
+  padding-left: 17px; /* preserve text x-position alongside the 3px coloured border */
+}
+
+.match-item-date.match-item-today-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #3fb950;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  min-width: 0;
+}
 
 .match-item-name {
   font-size: 13px;

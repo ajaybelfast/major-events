@@ -1581,17 +1581,27 @@ function buildMatchPanel(tournamentName) {
         items
           .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.name.localeCompare(b.name))
           .forEach(m => {
+            const md      = parseLocalDate(m.startDate);
+            const isToday = md.getTime() === today.getTime();
+            const isPast  = md.getTime() < today.getTime();
+
             const item = document.createElement('div');
-            item.className = 'match-item';
+            item.className = 'match-item'
+              + (isToday ? ' match-item-today' : '')
+              + (isPast  ? ' match-item-past'  : '');
 
             const nameEl = document.createElement('span');
             nameEl.className   = 'match-item-name';
             nameEl.textContent = m.name;
 
-            const md     = parseLocalDate(m.startDate);
             const dateEl = document.createElement('span');
-            dateEl.className   = 'match-item-date';
-            dateEl.textContent = `${md.getDate()} ${MONTHS[md.getMonth()]}`;
+            if (isToday) {
+              dateEl.className   = 'match-item-date match-item-today-pill';
+              dateEl.textContent = 'TODAY';
+            } else {
+              dateEl.className   = 'match-item-date';
+              dateEl.textContent = `${md.getDate()} ${MONTHS[md.getMonth()]}`;
+            }
 
             item.appendChild(dateEl);
             item.appendChild(nameEl);
