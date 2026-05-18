@@ -789,7 +789,16 @@ body {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.9px;
-  margin-bottom: 5px;
+  margin-bottom: 2px;
+}
+
+.tt-subsport {
+  font-size: 11px;
+  font-weight: 600;
+  color: #8b949e;
+  letter-spacing: 0.3px;
+  margin-bottom: 7px;
+  line-height: 1.3;
 }
 
 .tt-name {
@@ -803,14 +812,32 @@ body {
 .tt-row {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   font-size: 13px;
   color: #8b949e;
-  margin-bottom: 4px;
+  margin-bottom: 5px;
   line-height: 1.4;
 }
 
 .tt-row:last-child { margin-bottom: 0; }
+
+.tt-flag {
+  font-size: 18px;
+  line-height: 1;
+  width: 22px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.tt-icon {
+  font-size: 12px;
+  color: #6e7681;
+  width: 22px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.tt-text { min-width: 0; }
 
 /* ── Event star in timeline rows ────────────────────────── */
 .event-star-marker {
@@ -1300,11 +1327,40 @@ body {
 .week-event-name {
   font-size: 13px;
   color: #c9d1d9;
+  min-width: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+
+.week-event-name-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.week-event-name-line {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
 }
+
+.week-event-sub {
+  font-size: 11px;
+  color: #6e7681;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* Sub-category stays muted even when the parent row is highlighted gold. */
+.week-event-highlight .week-event-sub { color: #6e7681; }
 
 /* Rows in past weeks are dimmed so finished weeks read as completed */
 .week-section.week-past .week-event-item { opacity: 0.6; }

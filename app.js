@@ -266,7 +266,7 @@ function renderSettingsFavourites() {
   const header = document.createElement('div');
   header.className = 'settings-section-header';
   header.innerHTML = `
-    <span class="settings-section-title"><i class="fa-solid fa-star" style="color:#F7C948"></i> Favourites</span>
+    <span class="settings-section-title"><i class="fa-solid fa-star" style="color:#F7C948"></i> Favorite Events</span>
     <span class="settings-section-count">${favEvents.length}</span>
   `;
   section.appendChild(header);
@@ -278,7 +278,7 @@ function renderSettingsFavourites() {
   if (favEvents.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'settings-fav-empty';
-    empty.textContent = 'No favourites yet. Star a tournament on the timeline to add it here.';
+    empty.textContent = 'No favorite events yet. Star a tournament on the timeline to add it here.';
     list.appendChild(empty);
   } else {
     favEvents.forEach(ev => list.appendChild(renderSettingsFavRow(ev)));
@@ -288,7 +288,7 @@ function renderSettingsFavourites() {
   actions.className = 'settings-section-actions';
   const clearBtn = document.createElement('button');
   clearBtn.className = 'settings-clear-btn';
-  clearBtn.textContent = 'Clear all favourites';
+  clearBtn.textContent = 'Clear all favorite events';
   clearBtn.disabled = favEvents.length === 0;
   clearBtn.addEventListener('click', clearAllFavourites);
   actions.appendChild(clearBtn);
@@ -317,7 +317,7 @@ function renderSettingsFavRow(ev) {
 
   const unstar = document.createElement('button');
   unstar.className = 'settings-fav-unstar';
-  unstar.title = 'Remove from favourites';
+  unstar.title = 'Remove from favorite events';
   unstar.innerHTML = '<i class="fa-solid fa-xmark"></i>';
   unstar.addEventListener('click', () => {
     toggleFavourite(ev);
@@ -336,7 +336,7 @@ function renderSettingsFavRow(ev) {
 
 function clearAllFavourites() {
   if (favourites.size === 0) return;
-  const msg = `Remove all ${favourites.size} favourited tournaments?`;
+  const msg = `Remove all ${favourites.size} favorite events?`;
   if (!confirm(msg)) return;
   favourites.clear();
   saveFavourites();
@@ -357,9 +357,30 @@ function clearAllFavourites() {
 const NO_SUBCATEGORY_SPLIT = new Set(['Yachting']);
 
 // Esports entries carry a `game` field — use "Esports (game)" as the row key.
+// For categories in NO_SUBCATEGORY_SPLIT this collapses to the bare category,
+// so they share a single lane regardless of sub-category.
 function effectiveCategory(ev) {
   if (NO_SUBCATEGORY_SPLIT.has(ev.category)) return ev.category;
   return ev.subCategory ? `${ev.category} (${ev.subCategory})` : ev.category;
+}
+
+// Full label for display contexts (tooltips, details) that should always show
+// both category AND sub-category even when the lane collapses. Use this
+// instead of effectiveCategory() when the reader needs to know the sub-cat.
+function fullCategoryLabel(ev) {
+  return ev.subCategory ? `${ev.category} (${ev.subCategory})` : ev.category;
+}
+
+// Sport label tailored for tooltips: shows "Category (sub-category)" — but
+// suppresses the sub-category when it substantially duplicates the tournament
+// name (e.g. avoids "Yachting (Rolex Sydney Hobart Yacht Race 2026)" sitting
+// on top of "Rolex Sydney Hobart Yacht Race").
+function tooltipSportLabel(ev) {
+  if (!ev.subCategory) return ev.category;
+  const sub  = ev.subCategory.toLowerCase().trim();
+  const name = (ev.name || '').toLowerCase().trim();
+  if (name && sub && (name.includes(sub) || sub.includes(name))) return ev.category;
+  return `${ev.category} (${ev.subCategory})`;
 }
 
 let catData = [];
@@ -653,15 +674,15 @@ function renderFilterOptions() {
     if (currentView === 'calendar' || currentView === 'weekly') rebuildCwView();
   });
   const favSpan = document.createElement('span');
-  favSpan.innerHTML = '<i class="fa-solid fa-star" style="color:#F7C948;margin-right:6px"></i>My favourites only';
+  favSpan.innerHTML = '<i class="fa-solid fa-star" style="color:#F7C948;margin-right:6px"></i>My favorite events only';
   favLabel.appendChild(favCb);
   favLabel.appendChild(favSpan);
   container.appendChild(favLabel);
 
-  // "Manage favourites" link opens the settings panel.
+  // "Manage favorite events" link opens the settings panel.
   const manage = document.createElement('button');
   manage.className = 'filter-manage-link';
-  manage.innerHTML = '<i class="fa-solid fa-gear"></i>Manage favourites…';
+  manage.innerHTML = '<i class="fa-solid fa-gear"></i>Manage favorite events…';
   manage.addEventListener('click', () => {
     document.getElementById('filterPanel').classList.remove('open');
     openSettingsPanel();
@@ -1079,7 +1100,7 @@ function buildTimelineRows() {
         const favBtn = document.createElement('button');
         const fav = isFavourite(ev);
         favBtn.className = 'bar-fav-btn' + (fav ? ' is-fav' : '');
-        favBtn.title = fav ? 'Remove from favourites' : 'Add to favourites';
+        favBtn.title = fav ? 'Remove from favorite events' : 'Add to favorite events';
         favBtn.innerHTML = `<i class="${fav ? 'fa-solid' : 'fa-regular'} fa-star"></i>`;
         favBtn.addEventListener('click', e => {
           e.stopPropagation();
@@ -1089,7 +1110,7 @@ function buildTimelineRows() {
           } else {
             const nowFav = isFavourite(ev);
             favBtn.classList.toggle('is-fav', nowFav);
-            favBtn.title = nowFav ? 'Remove from favourites' : 'Add to favourites';
+            favBtn.title = nowFav ? 'Remove from favorite events' : 'Add to favorite events';
             favBtn.innerHTML = `<i class="${nowFav ? 'fa-solid' : 'fa-regular'} fa-star"></i>`;
           }
         });
@@ -1157,14 +1178,19 @@ function fmtDate(d) {
 function showTooltip(e, ev, color) {
   const countries = parseCountries(ev.country);
   const countryRows = (countries.length ? countries : [ev.country]).map(c =>
-    `<div class="tt-row"><span style="font-size:24px">${getFlag(c)}</span>&nbsp;${c}</div>`
+    `<div class="tt-row"><span class="tt-flag">${getFlag(c)}</span><span class="tt-text">${c}</span></div>`
   ).join('');
+  const subRow = ev.subCategory ? `<div class="tt-subsport">${ev.subCategory}</div>` : '';
+  const dateLabel = ev.startDate === ev.endDate
+    ? fmtDate(ev.startDate)
+    : `${fmtDate(ev.startDate)} – ${fmtDate(ev.endDate)}`;
   tooltip.innerHTML = `
-    <div class="tt-sport" style="color:${color}">${effectiveCategory(ev)}</div>
+    <div class="tt-sport" style="color:${color}">${ev.category}</div>
+    ${subRow}
     <div class="tt-name">${ev.name}</div>
     ${countryRows}
-    <div class="tt-row">📅&nbsp;${ev.startDate === ev.endDate ? fmtDate(ev.startDate) : `${fmtDate(ev.startDate)} – ${fmtDate(ev.endDate)}`}</div>
-    <div class="tt-row">⏱&nbsp;${ev.lengthDays} day${ev.lengthDays !== 1 ? 's' : ''}</div>
+    <div class="tt-row"><i class="fa-solid fa-calendar tt-icon"></i><span class="tt-text">${dateLabel}</span></div>
+    <div class="tt-row"><i class="fa-solid fa-clock tt-icon"></i><span class="tt-text">${ev.lengthDays} day${ev.lengthDays !== 1 ? 's' : ''}</span></div>
   `;
   tooltip.classList.add('visible');
   moveTooltip(e);
@@ -1636,7 +1662,7 @@ function buildCwSidebar() {
     favSection.className = 'cw-section';
     favSection.id = 'cwFavSection';
     favSection.innerHTML = `
-      <div class="cw-section-title">Favourites</div>
+      <div class="cw-section-title">Favorite Events</div>
       <div class="cw-filter-list" id="cwFavList"></div>
     `;
     body.insertBefore(favSection, body.firstChild);
@@ -1645,8 +1671,8 @@ function buildCwSidebar() {
   favList.innerHTML = '';
   const favItem = document.createElement('div');
   favItem.className = 'cw-filter-item' + (showOnlyFavourites ? ' cw-active' : '');
-  favItem.dataset.label = 'favourites my favourites only';
-  favItem.innerHTML = `<i class="fa-solid fa-star" style="color:#F7C948;width:14px;text-align:center;flex-shrink:0;font-size:12px"></i><span class="cw-filter-label">My favourites only</span>`;
+  favItem.dataset.label = 'favorites favorite events my favorite events only';
+  favItem.innerHTML = `<i class="fa-solid fa-star" style="color:#F7C948;width:14px;text-align:center;flex-shrink:0;font-size:12px"></i><span class="cw-filter-label">My favorite events only</span>`;
   favItem.addEventListener('click', () => {
     showOnlyFavourites = !showOnlyFavourites;
     saveFavOnly();
@@ -2000,7 +2026,20 @@ function buildWeeklyView() {
               weekMarkerSlot.appendChild(m);
             }
             nameEl.appendChild(weekMarkerSlot);
-            nameEl.appendChild(document.createTextNode(ev.name));
+
+            const nameTextCol = document.createElement('span');
+            nameTextCol.className = 'week-event-name-col';
+            const nameLineEl = document.createElement('span');
+            nameLineEl.className = 'week-event-name-line';
+            nameLineEl.textContent = ev.name;
+            nameTextCol.appendChild(nameLineEl);
+            if (ev.subCategory) {
+              const subEl = document.createElement('span');
+              subEl.className = 'week-event-sub';
+              subEl.textContent = ev.subCategory;
+              nameTextCol.appendChild(subEl);
+            }
+            nameEl.appendChild(nameTextCol);
 
             const flagEl = document.createElement('span');
             flagEl.className   = 'week-event-flag';

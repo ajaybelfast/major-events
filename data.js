@@ -189,6 +189,8 @@ const FLAGS = {
   'Bolivia':               '🇧🇴', 'Cuba':                 '🇨🇺', 'Jamaica':          '🇯🇲',
   'Panama':                '🇵🇦', 'Guatemala':            '🇬🇹', 'Honduras':         '🇭🇳',
   'El Salvador':           '🇸🇻', 'Costa Rica':           '🇨🇷',
+  'Bermuda':               '🇧🇲', 'Cayman Islands':       '🇰🇾',
+  'Guadeloupe':            '🇬🇵',
   // ── Middle East ───────────────────────────────────────────
   'Saudi Arabia':          '🇸🇦', 'UAE':                  '🇦🇪', 'Qatar':            '🇶🇦',
   'Kuwait':                '🇰🇼', 'Bahrain':              '🇧🇭', 'Oman':             '🇴🇲',
