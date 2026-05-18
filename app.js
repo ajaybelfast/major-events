@@ -54,6 +54,7 @@ const SHEET_URL_MATCHES     = `${SHEET_BASE}?gid=531923703&single=true&output=cs
 
 let TOURNAMENTS = [];
 let MATCHES = [];
+let MATCHES_BY_TOURNAMENT = new Map();
 let _activeMatchTournament = null;
 
 // RFC-4180 CSV parser — handles quoted fields containing commas or newlines.
@@ -112,7 +113,8 @@ async function loadData() {
     };
     const subCategory = get('sub-category');
     if (subCategory) ev.subCategory = subCategory;
-    if (get('important').toLowerCase() === 'yes') ev.important = true;
+    if (get('highlight').toLowerCase() === 'yes') ev.highlight = true;
+    if (get('toppin').toLowerCase() === 'yes') ev.topPin = true;
     ev.lengthDays = Math.round((new Date(endDate) - new Date(startDate)) / 86400000) + 1;
     return ev;
   });
@@ -129,11 +131,167 @@ async function loadData() {
       category:   get('category'),
     };
   });
+
+  MATCHES_BY_TOURNAMENT = new Map();
+  MATCHES.forEach(m => {
+    const key = (m.tournament || '').toLowerCase();
+    if (!MATCHES_BY_TOURNAMENT.has(key)) MATCHES_BY_TOURNAMENT.set(key, []);
+    MATCHES_BY_TOURNAMENT.get(key).push(m);
+  });
 }
 
 function getMatchesForTournament(tournamentName) {
-  const normalized = tournamentName.toLowerCase();
-  return MATCHES.filter(m => m.tournament.toLowerCase() === normalized);
+  return MATCHES_BY_TOURNAMENT.get((tournamentName || '').toLowerCase()) || [];
+}
+
+// ============================================================
+//  FAVOURITES
+// ============================================================
+// Stable per-edition key: same tournament in 2026 vs 2027 are distinct favourites.
+const FAV_KEY = 'mjr_favourites';
+let favourites = new Set();
+let showOnlyFavourites = false;
+
+function favKeyOf(ev) { return `${ev.name}|${ev.startDate}`; }
+function isFavourite(ev) { return favourites.has(favKeyOf(ev)); }
+
+function loadFavourites() {
+  try { favourites = new Set(JSON.parse(localStorage.getItem(FAV_KEY) || '[]')); }
+  catch { favourites = new Set(); }
+  try { showOnlyFavourites = localStorage.getItem('mjr_fav_only') === '1'; }
+  catch { showOnlyFavourites = false; }
+}
+function saveFavourites() {
+  try { localStorage.setItem(FAV_KEY, JSON.stringify([...favourites])); } catch {}
+}
+function saveFavOnly() {
+  try { localStorage.setItem('mjr_fav_only', showOnlyFavourites ? '1' : '0'); } catch {}
+}
+function toggleFavourite(ev) {
+  const k = favKeyOf(ev);
+  if (favourites.has(k)) favourites.delete(k); else favourites.add(k);
+  saveFavourites();
+}
+
+// ============================================================
+//  SETTINGS PANEL
+// ============================================================
+function openSettingsPanel() {
+  document.getElementById('settingsBackdrop').classList.add('open');
+  const panel = document.getElementById('settingsPanel');
+  panel.classList.add('open');
+  panel.setAttribute('aria-hidden', 'false');
+  renderSettings();
+}
+
+function closeSettingsPanel() {
+  document.getElementById('settingsBackdrop').classList.remove('open');
+  const panel = document.getElementById('settingsPanel');
+  panel.classList.remove('open');
+  panel.setAttribute('aria-hidden', 'true');
+}
+
+function isSettingsPanelOpen() {
+  const panel = document.getElementById('settingsPanel');
+  return panel && panel.classList.contains('open');
+}
+
+function renderSettings() {
+  const content = document.getElementById('settingsContent');
+  content.innerHTML = '';
+  content.appendChild(renderSettingsFavourites());
+}
+
+function renderSettingsFavourites() {
+  const section = document.createElement('div');
+  section.className = 'settings-section';
+
+  const favEvents = TOURNAMENTS
+    .filter(isFavourite)
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const header = document.createElement('div');
+  header.className = 'settings-section-header';
+  header.innerHTML = `
+    <span class="settings-section-title"><i class="fa-solid fa-star" style="color:#F7C948"></i> Favourites</span>
+    <span class="settings-section-count">${favEvents.length}</span>
+  `;
+  section.appendChild(header);
+
+  const list = document.createElement('div');
+  list.className = 'settings-fav-list';
+  section.appendChild(list);
+
+  if (favEvents.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'settings-fav-empty';
+    empty.textContent = 'No favourites yet. Star a tournament on the timeline to add it here.';
+    list.appendChild(empty);
+  } else {
+    favEvents.forEach(ev => list.appendChild(renderSettingsFavRow(ev)));
+  }
+
+  const actions = document.createElement('div');
+  actions.className = 'settings-section-actions';
+  const clearBtn = document.createElement('button');
+  clearBtn.className = 'settings-clear-btn';
+  clearBtn.textContent = 'Clear all favourites';
+  clearBtn.disabled = favEvents.length === 0;
+  clearBtn.addEventListener('click', clearAllFavourites);
+  actions.appendChild(clearBtn);
+  section.appendChild(actions);
+
+  return section;
+}
+
+function renderSettingsFavRow(ev) {
+  const row = document.createElement('div');
+  row.className = 'settings-fav-row';
+
+  const sport = effectiveCategory(ev);
+  const dateStr = ev.startDate === ev.endDate
+    ? fmtDate(ev.startDate)
+    : `${fmtDate(ev.startDate)} – ${fmtDate(ev.endDate)}`;
+  const country = ev.country ? ` · ${ev.country}` : '';
+
+  row.innerHTML = `
+    <i class="fa-solid fa-star settings-fav-icon"></i>
+    <div class="settings-fav-meta">
+      <div class="settings-fav-name">${ev.name}</div>
+      <div class="settings-fav-detail">${sport} · ${dateStr}${country}</div>
+    </div>
+  `;
+
+  const unstar = document.createElement('button');
+  unstar.className = 'settings-fav-unstar';
+  unstar.title = 'Remove from favourites';
+  unstar.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+  unstar.addEventListener('click', () => {
+    toggleFavourite(ev);
+    row.classList.add('removing');
+    setTimeout(() => {
+      renderSettings();           // refresh count + list
+      updateFilterBtn();
+      updateCwUI();
+      rebuildViews();
+      if (currentView === 'calendar' || currentView === 'weekly') rebuildCwView();
+    }, 180);
+  });
+  row.appendChild(unstar);
+  return row;
+}
+
+function clearAllFavourites() {
+  if (favourites.size === 0) return;
+  const msg = `Remove all ${favourites.size} favourited tournaments?`;
+  if (!confirm(msg)) return;
+  favourites.clear();
+  saveFavourites();
+  renderSettings();
+  updateFilterBtn();
+  updateCwUI();
+  rebuildViews();
+  if (currentView === 'calendar' || currentView === 'weekly') rebuildCwView();
 }
 
 // ============================================================
@@ -222,9 +380,14 @@ function getCountryStatus({ events }) {
 function getSortedCountryData() {
   const today   = new Date(); today.setHours(0, 0, 0, 0);
   const todayMs = today.getTime();
-  const source  = activeFilters.size > 0
+  let source    = activeFilters.size > 0
     ? getCountryData().filter(d => activeFilters.has(d.country))
     : getCountryData();
+  if (showOnlyFavourites) {
+    source = source
+      .map(d => ({ ...d, events: d.events.filter(isFavourite) }))
+      .filter(d => d.events.length > 0);
+  }
 
   function makeCountryEntry(country, events, isLiveSlice) {
     const { laneCount, rowHeight } = assignCountryLanes(events);
@@ -316,8 +479,10 @@ function buildMonthHeaders() {
   // Star markers — assign vertical lanes so no two labels ever overlap horizontally
   const LABEL_SLOT_H = 20; // px per lane slot — 3 lanes fit within the 64px header
 
+  // Header rail shows ONLY tournaments explicitly pinned via the `toppin`
+  // spreadsheet column. Works for any format (single-day OR multi-day).
   const headerEvents = TOURNAMENTS
-    .filter(ev => ev.format === 'event' || ev.format === 'race')
+    .filter(ev => ev.topPin === true)
     .map(ev => ({ ev, x: dayOffset(ev.startDate) * DAY_PX }))
     .filter(({ x }) => x >= 0 && x <= TOTAL_W)
     .sort((a, b) => a.x - b.x);
@@ -347,6 +512,8 @@ function buildMonthHeaders() {
       marker.appendChild(spacer);
     }
 
+    // Every entry here is a `toppin` tournament — always render in the
+    // original gold pill so it stands out as a curated, featured event.
     const label = document.createElement('div');
     label.className   = 'event-header-label';
     label.textContent = `★ ${ev.name}`;
@@ -385,7 +552,7 @@ function saveFilters() {
 function updateFilterBtn() {
   const btn = document.getElementById('filterBtn');
   if (!btn) return;
-  const count = activeFilters.size;
+  const count = activeFilters.size + (showOnlyFavourites ? 1 : 0);
   btn.classList.toggle('filter-btn-active', count > 0);
   let badge = btn.querySelector('.filter-badge');
   if (count > 0) {
@@ -394,6 +561,8 @@ function updateFilterBtn() {
   } else if (badge) {
     badge.remove();
   }
+  const clearBtn = document.getElementById('filterClearIconBtn');
+  if (clearBtn) clearBtn.classList.toggle('visible', count > 0);
 }
 
 function toggleFilterPanel() {
@@ -405,6 +574,40 @@ function toggleFilterPanel() {
 function renderFilterOptions() {
   const container = document.getElementById('filterOptions');
   container.innerHTML = '';
+
+  // Favourites toggle — always at the top of the panel
+  const favLabel = document.createElement('label');
+  favLabel.className = 'filter-option filter-option-fav';
+  const favCb = document.createElement('input');
+  favCb.type = 'checkbox';
+  favCb.checked = showOnlyFavourites;
+  favCb.addEventListener('change', () => {
+    showOnlyFavourites = favCb.checked;
+    saveFavOnly();
+    updateFilterBtn();
+    rebuildViews();
+    if (currentView === 'calendar' || currentView === 'weekly') rebuildCwView();
+  });
+  const favSpan = document.createElement('span');
+  favSpan.innerHTML = '<i class="fa-solid fa-star" style="color:#F7C948;margin-right:6px"></i>My favourites only';
+  favLabel.appendChild(favCb);
+  favLabel.appendChild(favSpan);
+  container.appendChild(favLabel);
+
+  // "Manage favourites" link opens the settings panel.
+  const manage = document.createElement('button');
+  manage.className = 'filter-manage-link';
+  manage.innerHTML = '<i class="fa-solid fa-gear"></i>Manage favourites…';
+  manage.addEventListener('click', () => {
+    document.getElementById('filterPanel').classList.remove('open');
+    openSettingsPanel();
+  });
+  container.appendChild(manage);
+
+  const sep = document.createElement('div');
+  sep.className = 'filter-option-sep';
+  container.appendChild(sep);
+
   const options = sortMode === 'country'
     ? getCountryData().map(d => d.country)
     : catData.map(d => d.cat);
@@ -431,7 +634,9 @@ function renderFilterOptions() {
 
 function clearFilters() {
   activeFilters.clear();
+  showOnlyFavourites = false;
   saveFilters();
+  saveFavOnly();
   updateFilterBtn();
   renderFilterOptions();
   rebuildViews();
@@ -485,7 +690,12 @@ function assignCountryLanes(events) {
 function getSortedCatData() {
   const today   = new Date(); today.setHours(0, 0, 0, 0);
   const todayMs = today.getTime();
-  const source  = activeFilters.size > 0 ? catData.filter(d => activeFilters.has(d.cat)) : catData;
+  let source    = activeFilters.size > 0 ? catData.filter(d => activeFilters.has(d.cat)) : catData;
+  if (showOnlyFavourites) {
+    source = source
+      .map(d => ({ ...d, events: d.events.filter(isFavourite) }))
+      .filter(d => d.events.length > 0);
+  }
 
   function makeEntry(cat, events, isLiveSlice) {
     const { laneCount, rowHeight } = assignLanes(events);
@@ -676,12 +886,18 @@ function buildTimelineRows() {
     bar.dataset.evName = ev.name;
 
     if (isEvent) {
-      bar.className = 'event-star-marker';
+      const isMono = !ev.highlight;
+      bar.className = 'event-star-marker' + (isMono ? ' is-mono' : '');
       bar.style.cssText = `
         left:${startPx}px; top:${topPx}px;
         z-index:${10 + laneIdx};
       `;
-      bar.textContent = '★';
+      if (isMono) {
+        const iconCls = SPORT_ICONS[effectiveCategory(ev)] || 'fa-solid fa-trophy';
+        bar.innerHTML = `<i class="${iconCls}"></i>`;
+      } else {
+        bar.textContent = '★';
+      }
     } else {
       bar.style.cssText = `
         left:${startPx}px; width:${widthPx}px; top:${topPx}px; height:${BAR_H}px;
@@ -735,10 +951,33 @@ function buildTimelineRows() {
         }
         bar.appendChild(todayLabel);
       }
+
+      // Favourite star — only when bar is wide enough to fit the icon comfortably.
+      if (widthPx >= 58) {
+        bar.classList.add('has-fav');
+        const favBtn = document.createElement('button');
+        const fav = isFavourite(ev);
+        favBtn.className = 'bar-fav-btn' + (fav ? ' is-fav' : '');
+        favBtn.title = fav ? 'Remove from favourites' : 'Add to favourites';
+        favBtn.innerHTML = `<i class="${fav ? 'fa-solid' : 'fa-regular'} fa-star"></i>`;
+        favBtn.addEventListener('click', e => {
+          e.stopPropagation();
+          toggleFavourite(ev);
+          if (showOnlyFavourites) {
+            rebuildViews();
+          } else {
+            const nowFav = isFavourite(ev);
+            favBtn.classList.toggle('is-fav', nowFav);
+            favBtn.title = nowFav ? 'Remove from favourites' : 'Add to favourites';
+            favBtn.innerHTML = `<i class="${nowFav ? 'fa-solid' : 'fa-regular'} fa-star"></i>`;
+          }
+        });
+        bar.appendChild(favBtn);
+      }
     }
 
-    if (!isEvent && ev.important) {
-      bar.classList.add('bar-important');
+    if (!isEvent && ev.highlight) {
+      bar.classList.add('bar-highlight');
       const shimmer = document.createElement('div');
       shimmer.className = 'shimmer-sweep';
       bar.appendChild(shimmer);
@@ -803,7 +1042,7 @@ function showTooltip(e, ev, color) {
     <div class="tt-sport" style="color:${color}">${effectiveCategory(ev)}</div>
     <div class="tt-name">${ev.name}</div>
     ${countryRows}
-    <div class="tt-row">📅&nbsp;${fmtDate(ev.startDate)} – ${fmtDate(ev.endDate)}</div>
+    <div class="tt-row">📅&nbsp;${ev.startDate === ev.endDate ? fmtDate(ev.startDate) : `${fmtDate(ev.startDate)} – ${fmtDate(ev.endDate)}`}</div>
     <div class="tt-row">⏱&nbsp;${ev.lengthDays} day${ev.lengthDays !== 1 ? 's' : ''}</div>
   `;
   tooltip.classList.add('visible');
@@ -1068,6 +1307,8 @@ function initSearch() {
   function closeResults() {
     results.classList.remove('open');
     results.innerHTML = '';
+    combinedItems = [];
+    selectedIdx = -1;
   }
 
   function goToTournament(ev) {
@@ -1082,11 +1323,11 @@ function initSearch() {
     }
   }
 
-  let matches = [];
+  let combinedItems = []; // { type: 'chip', kind, label } | { type: 'tournament', ev }
   let selectedIdx = -1;
 
   function setSelected(idx) {
-    const items = results.querySelectorAll('.search-result-item');
+    const items = results.querySelectorAll('.search-result-item, .search-action-chip');
     items.forEach(el => el.classList.remove('search-result-selected'));
     selectedIdx = idx;
     if (idx >= 0 && idx < items.length) {
@@ -1095,34 +1336,99 @@ function initSearch() {
     }
   }
 
+  function activateItem(item) {
+    if (!item) return;
+    if (item.type === 'chip') {
+      applySearchFilter(item.kind, item.label);
+      input.value = '';
+      closeResults();
+      input.blur();
+    } else {
+      goToTournament(item.ev);
+    }
+  }
+
   input.addEventListener('input', () => {
     const q = input.value.trim().toLowerCase();
     selectedIdx = -1;
     if (!q) { closeResults(); return; }
 
-    matches = TOURNAMENTS
-      .filter(ev => ev.name.toLowerCase().includes(q))
-      .slice(0, 7);
+    // Action chips: distinct sports / countries that match the query.
+    const matchingSports = [...new Set(TOURNAMENTS.map(ev => effectiveCategory(ev)))]
+      .filter(s => s && s.toLowerCase().includes(q))
+      .sort()
+      .slice(0, 2);
+    const matchingCountries = [...new Set(TOURNAMENTS.map(ev => ev.country).filter(Boolean))]
+      .filter(c => c.toLowerCase().includes(q))
+      .sort()
+      .slice(0, 2);
 
-    if (matches.length === 0) {
+    // Tournament rows: name OR sport OR country matches.
+    const tournamentMatches = TOURNAMENTS.filter(ev => {
+      const name    = (ev.name || '').toLowerCase();
+      const sport   = effectiveCategory(ev).toLowerCase();
+      const country = (ev.country || '').toLowerCase();
+      return name.includes(q) || sport.includes(q) || country.includes(q);
+    }).slice(0, 7);
+
+    combinedItems = [
+      ...matchingSports.map(s => ({ type: 'chip', kind: 'sport', label: s })),
+      ...matchingCountries.map(c => ({ type: 'chip', kind: 'country', label: c })),
+      ...tournamentMatches.map(ev => ({ type: 'tournament', ev })),
+    ];
+
+    if (combinedItems.length === 0) {
       results.innerHTML = '<div class="search-no-results">No results</div>';
-    } else {
-      results.innerHTML = matches.map((ev, i) =>
-        `<div class="search-result-item" data-idx="${i}">
-          <span class="sr-name">${ev.name}</span>
-          <span class="sr-meta">${getFlag(ev.country)} ${ev.country} &middot; ${effectiveCategory(ev)} &middot; ${fmtDate(ev.startDate)}</span>
-        </div>`
-      ).join('');
-
-      results.querySelectorAll('.search-result-item').forEach((el, i) => {
-        el.addEventListener('mousedown', e => {
-          e.preventDefault();
-          goToTournament(matches[i]);
-        });
-        el.addEventListener('mousemove', () => setSelected(i));
-      });
+      results.classList.add('open');
+      return;
     }
+
+    let html = '';
+    const chipCount = matchingSports.length + matchingCountries.length;
+    if (chipCount > 0) {
+      html += '<div class="search-section-title">Filter to</div>';
+      matchingSports.forEach(s => {
+        const cls   = SPORT_ICONS[s] || 'fa-solid fa-trophy';
+        const color = getColor(s);
+        html += `<div class="search-action-chip">
+          <i class="fa-solid fa-arrow-right sr-chip-arrow"></i>
+          <i class="${cls} sr-chip-icon" style="color:${color}"></i>
+          <span class="sr-chip-text">Filter to <strong>${s}</strong></span>
+          <span class="sr-chip-kind">sport</span>
+        </div>`;
+      });
+      matchingCountries.forEach(c => {
+        html += `<div class="search-action-chip">
+          <i class="fa-solid fa-arrow-right sr-chip-arrow"></i>
+          <span class="sr-chip-flag">${getFlag(c)}</span>
+          <span class="sr-chip-text">Filter to <strong>${c}</strong></span>
+          <span class="sr-chip-kind">country</span>
+        </div>`;
+      });
+      if (tournamentMatches.length > 0) {
+        html += '<div class="search-section-title">Tournaments</div>';
+      }
+    }
+
+    tournamentMatches.forEach(ev => {
+      html += `<div class="search-result-item">
+        <span class="sr-name">${ev.name}</span>
+        <span class="sr-meta">${getFlag(ev.country)} ${ev.country} &middot; ${effectiveCategory(ev)} &middot; ${fmtDate(ev.startDate)}</span>
+      </div>`;
+    });
+
+    results.innerHTML = html;
     results.classList.add('open');
+
+    // Wire up all selectable rows in document order so keyboard nav matches.
+    const rowEls = results.querySelectorAll('.search-result-item, .search-action-chip');
+    rowEls.forEach((el, i) => {
+      el.addEventListener('mousedown', e => {
+        e.preventDefault();
+        activateItem(combinedItems[i]);
+      });
+      el.addEventListener('mousemove', () => setSelected(i));
+    });
   });
 
   input.addEventListener('keydown', e => {
@@ -1130,18 +1436,56 @@ function initSearch() {
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setSelected(Math.min(selectedIdx + 1, matches.length - 1));
+      setSelected(Math.min(selectedIdx + 1, combinedItems.length - 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setSelected(Math.max(selectedIdx - 1, 0));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      const target = selectedIdx >= 0 ? matches[selectedIdx] : matches[0];
-      if (target) goToTournament(target);
+      const target = combinedItems[selectedIdx >= 0 ? selectedIdx : 0];
+      activateItem(target);
     }
   });
 
   input.addEventListener('blur', () => setTimeout(closeResults, 150));
+}
+
+function applySearchFilter(kind, label) {
+  if (kind === 'sport') {
+    if (sortMode === 'country') {
+      sortMode = 'live';
+      document.getElementById('sidebarLabel').textContent = 'Sport';
+      const filterBtn = document.getElementById('filterBtn');
+      if (filterBtn) filterBtn.title = 'Filter by sport';
+      document.getElementById('btnAlpha').classList.remove('on');
+      document.getElementById('btnLive').classList.add('on');
+      document.getElementById('btnCountry').classList.remove('on');
+    }
+    activeFilters = new Set([label]);
+    cwFilters.sports = new Set([label]);
+    cwFilters.countries.clear();
+  } else if (kind === 'country') {
+    if (sortMode !== 'country') {
+      sortMode = 'country';
+      document.getElementById('sidebarLabel').textContent = 'Country';
+      const filterBtn = document.getElementById('filterBtn');
+      if (filterBtn) filterBtn.title = 'Filter by country';
+      document.getElementById('btnAlpha').classList.remove('on');
+      document.getElementById('btnLive').classList.remove('on');
+      document.getElementById('btnCountry').classList.add('on');
+    }
+    activeFilters = new Set([label]);
+    cwFilters.countries = new Set([label]);
+    cwFilters.sports.clear();
+  } else {
+    return;
+  }
+  saveFilters();
+  updateFilterBtn();
+  updateCwUI();
+  rebuildViews();
+  buildCwSidebar();
+  if (currentView === 'calendar' || currentView === 'weekly') rebuildCwView();
 }
 
 // ============================================================
@@ -1152,15 +1496,45 @@ const cwFilters = { sports: new Set(), countries: new Set() };
 
 function getFilteredTournaments() {
   const { sports, countries } = cwFilters;
-  if (!sports.size && !countries.size) return TOURNAMENTS;
+  if (!sports.size && !countries.size && !showOnlyFavourites) return TOURNAMENTS;
   return TOURNAMENTS.filter(ev => {
     const sportOk   = !sports.size   || sports.has(effectiveCategory(ev));
     const countryOk = !countries.size || countries.has(ev.country);
-    return sportOk && countryOk;
+    const favOk     = !showOnlyFavourites || isFavourite(ev);
+    return sportOk && countryOk && favOk;
   });
 }
 
 function buildCwSidebar() {
+  // Favourites toggle — injected as the first section of the cw sidebar body.
+  const body = document.getElementById('cwSidebarBody');
+  let favSection = document.getElementById('cwFavSection');
+  if (!favSection) {
+    favSection = document.createElement('div');
+    favSection.className = 'cw-section';
+    favSection.id = 'cwFavSection';
+    favSection.innerHTML = `
+      <div class="cw-section-title">Favourites</div>
+      <div class="cw-filter-list" id="cwFavList"></div>
+    `;
+    body.insertBefore(favSection, body.firstChild);
+  }
+  const favList = document.getElementById('cwFavList');
+  favList.innerHTML = '';
+  const favItem = document.createElement('div');
+  favItem.className = 'cw-filter-item' + (showOnlyFavourites ? ' cw-active' : '');
+  favItem.dataset.label = 'favourites my favourites only';
+  favItem.innerHTML = `<i class="fa-solid fa-star" style="color:#F7C948;width:14px;text-align:center;flex-shrink:0;font-size:12px"></i><span class="cw-filter-label">My favourites only</span>`;
+  favItem.addEventListener('click', () => {
+    showOnlyFavourites = !showOnlyFavourites;
+    saveFavOnly();
+    favItem.classList.toggle('cw-active', showOnlyFavourites);
+    updateCwUI();
+    rebuildCwView();
+    updateFilterBtn();
+  });
+  favList.appendChild(favItem);
+
   buildCwList(
     'cwSportList',
     [...new Set(TOURNAMENTS.map(ev => effectiveCategory(ev)))].sort(),
@@ -1198,6 +1572,14 @@ function buildCwList(listId, items, filterSet, iconFn) {
   });
 }
 
+function clearCwSearch() {
+  const inp = document.getElementById('cwSearchInput');
+  if (!inp) return;
+  inp.value = '';
+  filterCwSidebar('');
+  inp.focus();
+}
+
 function filterCwSidebar(q) {
   const lq = q.trim().toLowerCase();
   ['cwSportList', 'cwCountryList'].forEach(id => {
@@ -1215,7 +1597,7 @@ function filterCwSidebar(q) {
 }
 
 function updateCwUI() {
-  const total = cwFilters.sports.size + cwFilters.countries.size;
+  const total = cwFilters.sports.size + cwFilters.countries.size + (showOnlyFavourites ? 1 : 0);
   const badge = document.getElementById('cwActiveBadge');
   if (badge) { badge.textContent = total || ''; badge.style.display = total ? '' : 'none'; }
   const btn = document.getElementById('cwClearBtn');
@@ -1225,6 +1607,9 @@ function updateCwUI() {
 function clearCwFilters() {
   cwFilters.sports.clear();
   cwFilters.countries.clear();
+  showOnlyFavourites = false;
+  saveFavOnly();
+  updateFilterBtn();
   document.getElementById('cwSearchInput').value = '';
   filterCwSidebar('');
   buildCwSidebar();
@@ -1298,10 +1683,41 @@ function buildWeeklyView() {
   const container = mainPanel;
 
   const today      = new Date(); today.setHours(0,0,0,0);
-  const startYear  = TIMELINE_START.getFullYear();
-  const endYear    = TIMELINE_END.getFullYear();
   const MONTHS     = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const fmtDate    = d => `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+
+  // Compute the rendered week window: trim weeks before the first filtered event
+  // and after the last, but always extend to include the current week (which
+  // keeps the "you are here" blue marker visible no matter the filter).
+  function weekMondayOf(d) {
+    const day = d.getDay();
+    const mon = new Date(d);
+    mon.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
+    mon.setHours(0, 0, 0, 0);
+    return mon;
+  }
+  const currentMon = weekMondayOf(today);
+  const filtered = getFilteredTournaments();
+  let renderStart, renderEnd;
+  if (filtered.length === 0) {
+    renderStart = new Date(currentMon);
+    renderEnd   = new Date(currentMon);
+  } else {
+    let minStart = Infinity, maxEnd = -Infinity;
+    filtered.forEach(ev => {
+      const s = parseLocalDate(ev.startDate).getTime();
+      const e = parseLocalDate(ev.endDate).getTime();
+      if (s < minStart) minStart = s;
+      if (e > maxEnd)   maxEnd   = e;
+    });
+    const firstMon = weekMondayOf(new Date(minStart));
+    const lastMon  = weekMondayOf(new Date(maxEnd));
+    renderStart = firstMon < currentMon ? firstMon : currentMon;
+    renderEnd   = lastMon  > currentMon ? lastMon  : currentMon;
+  }
+
+  const startYear = renderStart.getFullYear();
+  const endYear   = renderEnd.getFullYear();
 
   for (let year = startYear; year <= endYear; year++) {
     const yearStart = firstMondayOfYear(year);
@@ -1315,7 +1731,11 @@ function buildWeeklyView() {
       const weekEnd = new Date(weekStart);
       weekEnd.setDate(weekEnd.getDate() + 6);
 
-      if (weekEnd >= TIMELINE_START && weekStart <= TIMELINE_END) {
+      const isCurrentWeek = today >= weekStart && today <= weekEnd;
+      const inRenderRange = weekEnd >= renderStart && weekStart <= renderEnd;
+
+      if ((isCurrentWeek || inRenderRange)
+          && weekEnd >= TIMELINE_START && weekStart <= TIMELINE_END) {
         if (!yearHeaderAdded) {
           const yearLabel = document.createElement('div');
           yearLabel.className = 'weekly-year-label';
@@ -1324,8 +1744,7 @@ function buildWeeklyView() {
           yearHeaderAdded = true;
         }
 
-        const isCurrentWeek = today >= weekStart && today <= weekEnd;
-        const isPastWeek    = weekEnd < today;
+        const isPastWeek = weekEnd < today;
 
         const weekEvents = getFilteredTournaments()
           .filter(ev => {
@@ -1367,7 +1786,7 @@ function buildWeeklyView() {
 
             const item = document.createElement('div');
             item.className   = 'week-event-item'
-              + (ev.important ? ' week-event-important' : '');
+              + (ev.highlight ? ' week-event-highlight' : '');
             item.dataset.evName = ev.name;
 
             const icon = document.createElement('i');
@@ -1650,10 +2069,26 @@ function buildCalendarView() {
 
   const MONTH_NAMES = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
   const today      = new Date(); today.setHours(0,0,0,0);
-  const startYear  = TIMELINE_START.getFullYear();
-  const endYear    = TIMELINE_END.getFullYear();
 
-  for (let year = startYear; year <= endYear; year++) {
+  // Only render years that actually contain filtered events — avoids empty Jan–Dec
+  // grids for years like 2025/2027 when the active filter only matches 2026 events.
+  const filtered = getFilteredTournaments();
+  if (filtered.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'cal-empty';
+    empty.textContent = 'No events match the current filters.';
+    container.appendChild(empty);
+    return;
+  }
+  const yearsSet = new Set();
+  filtered.forEach(ev => {
+    const sy = parseLocalDate(ev.startDate).getFullYear();
+    const ey = parseLocalDate(ev.endDate).getFullYear();
+    for (let y = sy; y <= ey; y++) yearsSet.add(y);
+  });
+  const years = [...yearsSet].sort((a, b) => a - b);
+
+  for (const year of years) {
     const yearEl = document.createElement('div');
     yearEl.className   = 'cal-year-label';
     yearEl.textContent = year;
@@ -1704,7 +2139,7 @@ function buildCalendarView() {
 
         const item = document.createElement('div');
         item.className = 'cal-event-item'
-          + (ev.important ? ' cal-event-important' : '')
+          + (ev.highlight ? ' cal-event-highlight' : '')
           + (isLive ? ' cal-event-live' : '');
         item.dataset.evName = ev.name;
 
@@ -1761,9 +2196,11 @@ function initKeyboardShortcuts() {
     const inInput = document.activeElement.tagName === 'INPUT' ||
                     document.activeElement.tagName === 'TEXTAREA';
 
-    // Escape: close the weekly match panel if open, otherwise scroll to start (like logo click)
+    // Escape: close settings → match panel → otherwise scroll to start (like logo click)
     if (e.key === 'Escape' && !inInput) {
-      if (currentView === 'weekly' && _activeMatchTournament) {
+      if (isSettingsPanelOpen()) {
+        closeSettingsPanel();
+      } else if (currentView === 'weekly' && _activeMatchTournament) {
         closeMatchPanel();
       } else {
         scrollToStart();
@@ -1795,6 +2232,7 @@ async function init() {
     computeTimelineBounds();
     buildData();
     buildMonthHeaders();
+    loadFavourites();
     loadFilters();
     buildSidebar();
     buildTimelineRows();

@@ -5,7 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Major Sporting Tournaments 2026–2027</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="style.css?v=71">
+  <link rel="stylesheet" id="appStyle">
+  <script>
+    // Always refetch CSS — cheap on localhost, prevents stale styles after edits.
+    document.getElementById('appStyle').href = 'style.css?v=' + Date.now();
+  </script>
 </head>
 <body>
 
@@ -35,6 +39,7 @@
       <div class="search-results" id="searchResults"></div>
     </div>
     <button class="today-btn" onclick="goToToday()">&#9654; Today</button>
+    <button class="settings-btn" onclick="openSettingsPanel()" title="Settings"><i class="fa-solid fa-gear"></i></button>
   </div>
 </div>
 
@@ -45,6 +50,7 @@
       <div class="sidebar-header-top">
         <span id="sidebarLabel">Sport</span>
         <div class="sidebar-header-actions">
+          <button class="filter-clear-icon-btn" id="filterClearIconBtn" onclick="clearFilters()" title="Clear filters"><i class="fa-solid fa-xmark"></i></button>
           <button class="filter-btn" id="filterBtn" onclick="toggleFilterPanel()" title="Filter by sport"><i class="fa-solid fa-sliders"></i></button>
           <button class="hamburger-btn" id="hamburgerBtn" onclick="toggleSidebar()" title="Collapse sidebar"><i class="fa-solid fa-bars"></i></button>
         </div>
@@ -80,6 +86,7 @@
     <div class="cw-search-wrap">
       <i class="fa-solid fa-magnifying-glass cw-search-icon"></i>
       <input type="text" id="cwSearchInput" class="cw-search-input" placeholder="Search…" autocomplete="off" oninput="filterCwSidebar(this.value)">
+      <button type="button" class="cw-search-clear" id="cwSearchClear" onclick="clearCwSearch()" title="Clear search"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <div class="cw-sidebar-body" id="cwSidebarBody">
       <div class="cw-section" id="cwSportSection">
@@ -103,7 +110,63 @@
 
 <div class="tooltip" id="tooltip"></div>
 
-<script src="data.js?v=33"></script>
-<script src="app.js?v=86"></script>
+<div class="settings-backdrop" id="settingsBackdrop" onclick="closeSettingsPanel()"></div>
+<aside class="settings-panel" id="settingsPanel" aria-hidden="true">
+  <div class="settings-header">
+    <span class="settings-title"><i class="fa-solid fa-gear"></i> Settings</span>
+    <button class="settings-close" onclick="closeSettingsPanel()" title="Close">&times;</button>
+  </div>
+  <div class="settings-content" id="settingsContent"></div>
+</aside>
+
+<div class="version-badge" id="versionBadge"></div>
+
+<script>
+(async function loadAppScripts() {
+  const files = ['data.js', 'app.js'];
+  const versions = {};
+
+  async function mtime(url) {
+    try {
+      const r = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+      const lm = r.headers.get('Last-Modified');
+      return lm ? new Date(lm).getTime() : Date.now();
+    } catch {
+      return Date.now();
+    }
+  }
+
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.async = false;
+      s.onload = resolve;
+      s.onerror = reject;
+      document.body.appendChild(s);
+    });
+  }
+
+  // data.js must load before app.js — sequential await guarantees order.
+  for (const f of files) {
+    const ts = await mtime(f);
+    versions[f] = ts;
+    await loadScript(f + '?v=' + ts);
+  }
+
+  // Include CSS mtime in the displayed version (CSS itself uses Date.now for cache-bust).
+  versions['style.css'] = await mtime('style.css');
+
+  const newest = Math.max(...Object.values(versions));
+  const d = new Date(newest);
+  const pad = n => String(n).padStart(2, '0');
+  const badge = document.getElementById('versionBadge');
+  if (badge) {
+    badge.textContent =
+      'v ' + d.getFullYear() + '.' + pad(d.getMonth() + 1) + '.' + pad(d.getDate()) +
+      ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+})();
+</script>
 </body>
 </html>

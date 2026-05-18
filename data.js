@@ -143,6 +143,7 @@ const FLAGS = {
   'India':                 '🇮🇳', 'Singapore':            '🇸🇬', 'Thailand':         '🇹🇭',
   'Malaysia':              '🇲🇾', 'Indonesia':            '🇮🇩', 'Philippines':      '🇵🇭',
   'Vietnam':               '🇻🇳', 'Taiwan':               '🇹🇼', 'Hong Kong':        '🇭🇰',
+  'Macao':                 '🇲🇴', 'Macau':                '🇲🇴',
   'Pakistan':              '🇵🇰', 'Sri Lanka':            '🇱🇰', 'Bangladesh':       '🇧🇩',
   'Kazakhstan':            '🇰🇿', 'Uzbekistan':           '🇺🇿', 'North Korea':      '🇰🇵',
   // ── Oceania ───────────────────────────────────────────────
