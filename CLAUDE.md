@@ -24,11 +24,22 @@ Single-page vanilla JS app. No framework, no bundler, no dependencies beyond Fon
 
 **Data source:** Tournament data is fetched at runtime from a published Google Sheets CSV (`SHEET_URL` in app.js). Edit the sheet to add/update events — do not edit `data.js` for tournament data.
 
-**Data shape:** Each CSV row produces either a `TOURNAMENTS[]` entry or a `MATCHES[]` entry (when `format === 'match'`). Key `format` values: `tournament`, `season`, `event`, `race`, `onedayevent`, `match`. The `match` format is excluded from `TOURNAMENTS` and linked to a parent tournament by name. Rows may carry a `sub-category` field (e.g. Esports games like "VALORANT"); `effectiveCategory(ev)` returns `"Category (sub-category)"` for these.
+**Data shape:** Each CSV row produces either a `TOURNAMENTS[]` entry or a `MATCHES[]` entry (when `format === 'match'`). Key `format` values: `tournament`, `season`, `event`, `race`, `onedayevent`, `match`. The `match` format is excluded from `TOURNAMENTS` and linked to a parent tournament by name. Rows may carry a `sub-category` field (e.g. Esports games like "VALORANT"); `effectiveCategory(ev)` returns `"Category (sub-category)"` for these — except for categories listed in `NO_SUBCATEGORY_SPLIT` (currently `Yachting`), which always collapse to the bare category name regardless of `sub-category`.
 
 **Per-row flags (CSV columns, value = "yes" to enable):**
 - `highlight` → `ev.highlight`. Currently affects: (a) the in-row single-day event marker — highlighted events render as a gold ★ in their lane, non-highlighted single-day events render as a monochrome sport-icon tick; (b) multi-day bars get a gold border + shimmer (`.bar-highlight`); (c) tournament names in calendar and weekly views get gold styling (`.cal-event-highlight`, `.week-event-highlight`).
 - `toppin` → `ev.topPin`. Pins the tournament to the **top header rail** above the timeline (gold "★ Name" pill with vertical tick to the start date). Works for any `format` — single-day or multi-day. The header rail is exclusively driven by this flag now; it is NOT linked to single-day events.
+**Top revenue sports (separate sheet tab):** Sourced from a `SportCategories` tab in the same Google Sheet — NOT from per-event flags. The tab has two columns:
+- `category` — must match what `effectiveCategory(ev)` returns at runtime (e.g. `Tennis`, `Esports (VALORANT)`).
+- `toprevsport` — `yes`/blank.
+
+The tab's published-CSV URL lives in `SHEET_URL_SPORT_CATEGORIES` in `app.js`; its `gid` placeholder (`REPLACE_WITH_YOUR_GID`) must be replaced with the real gid before this lights up. Failure to fetch is non-fatal — the feature simply hides itself.
+
+After `loadData()`, `SPORT_CATEGORIES = [{ category, topRevSport }, …]`. `computeTopRevenueSports()` then builds `topRevenueSports = new Set(category names where topRevSport)`. Surfaces:
+- Gold `$` icon next to the sport name in the timeline sport-mode sidebar, the timeline filter panel sport list, and the cw-sidebar Sport list.
+- In both filter panels, top-revenue sports float to the top under a "Top revenue" header; the rest sit under "Other sports".
+- "Top revenue sports only" toggle (`showOnlyTopRevenue`, persisted to `mjr_top_rev_only`) in the timeline filter panel and the cw-sidebar — filters all three views via `getSortedCatData`, `getSortedCountryData`, and `getFilteredTournaments`.
+- Toggle hides itself entirely if `topRevenueSports.size === 0`.
 
 ## Three views
 

@@ -51,10 +51,15 @@ function parseLocalDate(str) {
 const SHEET_BASE = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSfVuGE4L38QC5CVV9zc3AN-vZ8Pi0ka7ieO10gpPZVq4bDYqoK41kUNaSxoKbGpmnEuwubg_Ln_mdE/pub';
 const SHEET_URL_TOURNAMENTS = `${SHEET_BASE}?gid=718549522&single=true&output=csv`;
 const SHEET_URL_MATCHES     = `${SHEET_BASE}?gid=531923703&single=true&output=csv`;
+// SportCategories tab — gid 986148101.
+// Columns: `category` (matches effectiveCategory output, e.g. "Tennis" or
+// "Esports (VALORANT)") and `toprevsport` (yes/no).
+const SHEET_URL_SPORT_CATEGORIES = `${SHEET_BASE}?gid=986148101&single=true&output=csv`;
 
 let TOURNAMENTS = [];
 let MATCHES = [];
 let MATCHES_BY_TOURNAMENT = new Map();
+let SPORT_CATEGORIES = []; // [{ category, topRevSport }]
 let _activeMatchTournament = null;
 
 // RFC-4180 CSV parser — handles quoted fields containing commas or newlines.
@@ -92,10 +97,14 @@ async function fetchSheet(url) {
 }
 
 async function loadData() {
-  const [tournamentRows, matchRows] = await Promise.all([
+  const [tournamentRows, matchRows, sportRows] = await Promise.all([
     fetchSheet(SHEET_URL_TOURNAMENTS),
     fetchSheet(SHEET_URL_MATCHES).catch(err => {
       console.error('Failed to load Matches tab:', err);
+      return [];
+    }),
+    fetchSheet(SHEET_URL_SPORT_CATEGORIES).catch(err => {
+      console.warn('Failed to load SportCategories tab (this is fine if you haven\'t set up the gid yet):', err);
       return [];
     }),
   ]);
@@ -138,6 +147,14 @@ async function loadData() {
     if (!MATCHES_BY_TOURNAMENT.has(key)) MATCHES_BY_TOURNAMENT.set(key, []);
     MATCHES_BY_TOURNAMENT.get(key).push(m);
   });
+
+  // Sport categories table: drives the "Top revenue" surfaces. One row per sport.
+  SPORT_CATEGORIES = sportRows
+    .map(get => ({
+      category:    get('category'),
+      topRevSport: get('toprevsport').toLowerCase() === 'yes',
+    }))
+    .filter(r => r.category);
 }
 
 function getMatchesForTournament(tournamentName) {
@@ -171,6 +188,42 @@ function toggleFavourite(ev) {
   const k = favKeyOf(ev);
   if (favourites.has(k)) favourites.delete(k); else favourites.add(k);
   saveFavourites();
+}
+
+// ============================================================
+//  TOP REVENUE SPORTS
+// ============================================================
+// Driven by the SportCategories sheet tab — one row per sport, with a
+// `toprevsport` column. `category` values must match what `effectiveCategory()`
+// returns at runtime (e.g. "Tennis" or "Esports (VALORANT)").
+let topRevenueSports = new Set();
+let showOnlyTopRevenue = false;
+
+function computeTopRevenueSports() {
+  // Build a flagged-set from SportCategories rows.
+  const flagged = new Set(
+    SPORT_CATEGORIES.filter(c => c.topRevSport).map(c => c.category)
+  );
+  // Expand: an event is "top revenue" if either its raw `category` (e.g.
+  // "Esports") OR its rendered `effectiveCategory()` (e.g. "Esports (VALORANT)")
+  // is flagged. This lets the sheet hold a single high-level entry like
+  // "Esports" that automatically covers every sub-categorised game.
+  topRevenueSports = new Set();
+  TOURNAMENTS.forEach(ev => {
+    if (flagged.has(ev.category) || flagged.has(effectiveCategory(ev))) {
+      topRevenueSports.add(effectiveCategory(ev));
+    }
+  });
+}
+function isTopRevenueSport(sport) {
+  return topRevenueSports.has(sport);
+}
+function loadTopRevenueFilter() {
+  try { showOnlyTopRevenue = localStorage.getItem('mjr_top_rev_only') === '1'; }
+  catch { showOnlyTopRevenue = false; }
+}
+function saveTopRevenueFilter() {
+  try { localStorage.setItem('mjr_top_rev_only', showOnlyTopRevenue ? '1' : '0'); } catch {}
 }
 
 // ============================================================
@@ -298,8 +351,14 @@ function clearAllFavourites() {
 //  DATA PREP
 // ============================================================
 
-// Esports entries carry a `game` field — use "Esports (game)" as the row key
+// Categories listed here are never split out by sub-category — every event in
+// the category collapses into one lane / row regardless of `sub-category`.
+// Esports stays sub-categorised (CS2, VALORANT, etc. each get their own lane).
+const NO_SUBCATEGORY_SPLIT = new Set(['Yachting']);
+
+// Esports entries carry a `game` field — use "Esports (game)" as the row key.
 function effectiveCategory(ev) {
+  if (NO_SUBCATEGORY_SPLIT.has(ev.category)) return ev.category;
   return ev.subCategory ? `${ev.category} (${ev.subCategory})` : ev.category;
 }
 
@@ -383,6 +442,11 @@ function getSortedCountryData() {
   let source    = activeFilters.size > 0
     ? getCountryData().filter(d => activeFilters.has(d.country))
     : getCountryData();
+  if (showOnlyTopRevenue) {
+    source = source
+      .map(d => ({ ...d, events: d.events.filter(ev => isTopRevenueSport(effectiveCategory(ev))) }))
+      .filter(d => d.events.length > 0);
+  }
   if (showOnlyFavourites) {
     source = source
       .map(d => ({ ...d, events: d.events.filter(isFavourite) }))
@@ -552,7 +616,7 @@ function saveFilters() {
 function updateFilterBtn() {
   const btn = document.getElementById('filterBtn');
   if (!btn) return;
-  const count = activeFilters.size + (showOnlyFavourites ? 1 : 0);
+  const count = activeFilters.size + (showOnlyFavourites ? 1 : 0) + (showOnlyTopRevenue ? 1 : 0);
   btn.classList.toggle('filter-btn-active', count > 0);
   let badge = btn.querySelector('.filter-badge');
   if (count > 0) {
@@ -604,14 +668,38 @@ function renderFilterOptions() {
   });
   container.appendChild(manage);
 
+  // Top-revenue-sports toggle — only renders if any sports are flagged in the sheet.
+  if (topRevenueSports.size > 0) {
+    const trLabel = document.createElement('label');
+    trLabel.className = 'filter-option filter-option-toprev';
+    const trCb = document.createElement('input');
+    trCb.type = 'checkbox';
+    trCb.checked = showOnlyTopRevenue;
+    trCb.addEventListener('change', () => {
+      showOnlyTopRevenue = trCb.checked;
+      saveTopRevenueFilter();
+      updateFilterBtn();
+      rebuildViews();
+      if (currentView === 'calendar' || currentView === 'weekly') rebuildCwView();
+    });
+    const trSpan = document.createElement('span');
+    trSpan.innerHTML = '<i class="fa-solid fa-dollar-sign" style="color:#F7C948;margin-right:6px"></i>Top revenue sports only';
+    trLabel.appendChild(trCb);
+    trLabel.appendChild(trSpan);
+    container.appendChild(trLabel);
+  }
+
   const sep = document.createElement('div');
   sep.className = 'filter-option-sep';
   container.appendChild(sep);
 
-  const options = sortMode === 'country'
+  // For sport mode, float top-revenue sports to the top under a labelled header.
+  const isSportMode = sortMode !== 'country';
+  const rawOptions = sortMode === 'country'
     ? getCountryData().map(d => d.country)
     : catData.map(d => d.cat);
-  options.forEach(opt => {
+
+  function renderOption(opt) {
     const label = document.createElement('label');
     label.className = 'filter-option';
     const cb = document.createElement('input');
@@ -625,18 +713,45 @@ function renderFilterOptions() {
       rebuildViews();
     });
     const span = document.createElement('span');
-    span.textContent = opt;
+    if (isSportMode && isTopRevenueSport(opt)) {
+      span.innerHTML = `${opt}<i class="fa-solid fa-dollar-sign filter-toprev-icon"></i>`;
+    } else {
+      span.textContent = opt;
+    }
     label.appendChild(cb);
     label.appendChild(span);
     container.appendChild(label);
-  });
+  }
+
+  if (isSportMode && topRevenueSports.size > 0) {
+    const top = rawOptions.filter(o => isTopRevenueSport(o));
+    const rest = rawOptions.filter(o => !isTopRevenueSport(o));
+    if (top.length > 0) {
+      const hdr = document.createElement('div');
+      hdr.className = 'filter-section-header';
+      hdr.innerHTML = '<i class="fa-solid fa-dollar-sign"></i> Top revenue';
+      container.appendChild(hdr);
+      top.forEach(renderOption);
+    }
+    if (rest.length > 0) {
+      const hdr2 = document.createElement('div');
+      hdr2.className = 'filter-section-header filter-section-header-rest';
+      hdr2.textContent = 'Other sports';
+      container.appendChild(hdr2);
+      rest.forEach(renderOption);
+    }
+  } else {
+    rawOptions.forEach(renderOption);
+  }
 }
 
 function clearFilters() {
   activeFilters.clear();
   showOnlyFavourites = false;
+  showOnlyTopRevenue = false;
   saveFilters();
   saveFavOnly();
+  saveTopRevenueFilter();
   updateFilterBtn();
   renderFilterOptions();
   rebuildViews();
@@ -691,6 +806,9 @@ function getSortedCatData() {
   const today   = new Date(); today.setHours(0, 0, 0, 0);
   const todayMs = today.getTime();
   let source    = activeFilters.size > 0 ? catData.filter(d => activeFilters.has(d.cat)) : catData;
+  if (showOnlyTopRevenue) {
+    source = source.filter(d => isTopRevenueSport(d.cat));
+  }
   if (showOnlyFavourites) {
     source = source
       .map(d => ({ ...d, events: d.events.filter(isFavourite) }))
@@ -834,9 +952,12 @@ function buildSidebar() {
     row.className    = 'sidebar-row';
     row.style.height = rowHeight + 'px';
     row.title        = cat;
+    const topRevHtml = isTopRevenueSport(cat)
+      ? '<i class="fa-solid fa-dollar-sign sidebar-toprev-icon" title="Top revenue sport"></i>'
+      : '';
     row.innerHTML = `
       <div class="category-icon">${iconHtml}</div>
-      <div class="category-label" title="${cat}">${cat}</div>
+      <div class="category-label" title="${cat}">${cat}${topRevHtml}</div>
       ${statusHtml}
     `;
     if (nextEv) {
@@ -1496,12 +1617,13 @@ const cwFilters = { sports: new Set(), countries: new Set() };
 
 function getFilteredTournaments() {
   const { sports, countries } = cwFilters;
-  if (!sports.size && !countries.size && !showOnlyFavourites) return TOURNAMENTS;
+  if (!sports.size && !countries.size && !showOnlyFavourites && !showOnlyTopRevenue) return TOURNAMENTS;
   return TOURNAMENTS.filter(ev => {
     const sportOk   = !sports.size   || sports.has(effectiveCategory(ev));
     const countryOk = !countries.size || countries.has(ev.country);
     const favOk     = !showOnlyFavourites || isFavourite(ev);
-    return sportOk && countryOk && favOk;
+    const topRevOk  = !showOnlyTopRevenue || isTopRevenueSport(effectiveCategory(ev));
+    return sportOk && countryOk && favOk && topRevOk;
   });
 }
 
@@ -1535,16 +1657,40 @@ function buildCwSidebar() {
   });
   favList.appendChild(favItem);
 
-  buildCwList(
-    'cwSportList',
-    [...new Set(TOURNAMENTS.map(ev => effectiveCategory(ev)))].sort(),
-    cwFilters.sports,
-    sport => {
-      const cls   = SPORT_ICONS[sport] || 'fa-solid fa-trophy';
-      const color = getColor(sport);
-      return `<i class="${cls}" style="color:${color};width:14px;text-align:center;flex-shrink:0;font-size:12px"></i>`;
+  // Top-revenue toggle — only injects when any sport is flagged in the sheet.
+  let trSection = document.getElementById('cwTopRevSection');
+  if (topRevenueSports.size > 0) {
+    if (!trSection) {
+      trSection = document.createElement('div');
+      trSection.className = 'cw-section';
+      trSection.id = 'cwTopRevSection';
+      trSection.innerHTML = `
+        <div class="cw-section-title">Top revenue</div>
+        <div class="cw-filter-list" id="cwTopRevList"></div>
+      `;
+      const favSec = document.getElementById('cwFavSection');
+      body.insertBefore(trSection, favSec.nextSibling);
     }
-  );
+    const trList = document.getElementById('cwTopRevList');
+    trList.innerHTML = '';
+    const trItem = document.createElement('div');
+    trItem.className = 'cw-filter-item' + (showOnlyTopRevenue ? ' cw-active' : '');
+    trItem.dataset.label = 'top revenue sports only';
+    trItem.innerHTML = `<i class="fa-solid fa-dollar-sign" style="color:#F7C948;width:14px;text-align:center;flex-shrink:0;font-size:12px"></i><span class="cw-filter-label">Top revenue sports only</span>`;
+    trItem.addEventListener('click', () => {
+      showOnlyTopRevenue = !showOnlyTopRevenue;
+      saveTopRevenueFilter();
+      trItem.classList.toggle('cw-active', showOnlyTopRevenue);
+      updateCwUI();
+      rebuildCwView();
+      updateFilterBtn();
+    });
+    trList.appendChild(trItem);
+  } else if (trSection) {
+    trSection.remove();
+  }
+
+  buildCwSportList();
   buildCwList(
     'cwCountryList',
     [...new Set(TOURNAMENTS.map(ev => ev.country))].sort(),
@@ -1552,6 +1698,49 @@ function buildCwSidebar() {
     country => `<span style="font-size:15px;flex-shrink:0;line-height:1">${getFlag(country)}</span>`
   );
   updateCwUI();
+}
+
+// Sport list: top-revenue sports float to the top under a "Top revenue" header,
+// remaining sports below under "Other sports". Each top-revenue row also gets a
+// trailing $ icon so the marking is visible even when the toggle is off.
+function buildCwSportList() {
+  const list = document.getElementById('cwSportList');
+  list.innerHTML = '';
+  const all = [...new Set(TOURNAMENTS.map(ev => effectiveCategory(ev)))].sort();
+  const top  = all.filter(s => isTopRevenueSport(s));
+  const rest = all.filter(s => !isTopRevenueSport(s));
+
+  function renderSport(sport, isTopRev) {
+    const cls   = SPORT_ICONS[sport] || 'fa-solid fa-trophy';
+    const color = getColor(sport);
+    const el = document.createElement('div');
+    el.className = 'cw-filter-item' + (cwFilters.sports.has(sport) ? ' cw-active' : '');
+    el.dataset.label = sport.toLowerCase();
+    const trailing = isTopRev ? '<i class="fa-solid fa-dollar-sign cw-toprev-icon"></i>' : '';
+    el.innerHTML = `<i class="${cls}" style="color:${color};width:14px;text-align:center;flex-shrink:0;font-size:12px"></i><span class="cw-filter-label">${sport}</span>${trailing}`;
+    el.addEventListener('click', () => {
+      cwFilters.sports.has(sport) ? cwFilters.sports.delete(sport) : cwFilters.sports.add(sport);
+      el.classList.toggle('cw-active', cwFilters.sports.has(sport));
+      updateCwUI();
+      rebuildCwView();
+    });
+    list.appendChild(el);
+  }
+
+  if (top.length > 0 && rest.length > 0) {
+    const hdr = document.createElement('div');
+    hdr.className = 'cw-subgroup-header';
+    hdr.innerHTML = '<i class="fa-solid fa-dollar-sign"></i> Top revenue';
+    list.appendChild(hdr);
+    top.forEach(s => renderSport(s, true));
+    const hdr2 = document.createElement('div');
+    hdr2.className = 'cw-subgroup-header cw-subgroup-header-rest';
+    hdr2.textContent = 'Other sports';
+    list.appendChild(hdr2);
+    rest.forEach(s => renderSport(s, false));
+  } else {
+    all.forEach(s => renderSport(s, isTopRevenueSport(s)));
+  }
 }
 
 function buildCwList(listId, items, filterSet, iconFn) {
@@ -1597,7 +1786,7 @@ function filterCwSidebar(q) {
 }
 
 function updateCwUI() {
-  const total = cwFilters.sports.size + cwFilters.countries.size + (showOnlyFavourites ? 1 : 0);
+  const total = cwFilters.sports.size + cwFilters.countries.size + (showOnlyFavourites ? 1 : 0) + (showOnlyTopRevenue ? 1 : 0);
   const badge = document.getElementById('cwActiveBadge');
   if (badge) { badge.textContent = total || ''; badge.style.display = total ? '' : 'none'; }
   const btn = document.getElementById('cwClearBtn');
@@ -1608,7 +1797,9 @@ function clearCwFilters() {
   cwFilters.sports.clear();
   cwFilters.countries.clear();
   showOnlyFavourites = false;
+  showOnlyTopRevenue = false;
   saveFavOnly();
+  saveTopRevenueFilter();
   updateFilterBtn();
   document.getElementById('cwSearchInput').value = '';
   filterCwSidebar('');
@@ -2231,6 +2422,8 @@ async function init() {
     await loadData();
     computeTimelineBounds();
     buildData();
+    computeTopRevenueSports();
+    loadTopRevenueFilter();
     buildMonthHeaders();
     loadFavourites();
     loadFilters();
