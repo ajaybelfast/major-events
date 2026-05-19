@@ -4,73 +4,83 @@
 // ============================================================
 //  SPORT COLORS
 // ============================================================
+// Each sport tries to get a relevant, distinct colour. Aliases (e.g.
+// Motorsport/Motorsports, Aussie Rules/AFL, Rugby/Rugby Union) share the same
+// hex — they're the same sport under different names.
 const SPORT_COLORS = {
-  'American Football':           '#4CAF82',
-  'Athletics':                   '#FF6B6B',
-  'Aquatics':                    '#4DD9D0',
-  'Badminton':                   '#45B7D1',
-  'Baseball':                    '#1A8FD1',
-  'Basketball':                  '#F7C948',
-  'Combat Sports':               '#E53935',
-  'MMA':                         '#E53935',
-  'Boxing':                      '#E53935',
-  'Cricket':                     '#6BCB77',
-  'Cycling':                     '#F4A261',
+  // ── Ball + field sports ──────────────────────────────────
+  'American Football':           '#C68642',  // tan leather ball
+  'Athletics':                   '#FF6B6B',  // red track
+  'Aquatics':                    '#00B4D8',  // pool blue
+  'Badminton':                   '#A78BFA',  // racket purple
+  'Baseball':                    '#1A8FD1',  // diamond blue
+  'Basketball':                  '#F4844C',  // basketball orange
+  'Basketball 3x3':              '#FFA947',  // 3x3 lighter orange
+  'Cricket':                     '#6BCB77',  // pitch green
+  'Football':                    '#F0F0F0',  // ⚪ white ball
+  'Futsal':                      '#34C759',  // indoor bright green
+  'Golf':                        '#95D5B2',  // fairway green
+  'Handball':                    '#FF7F50',  // coral
+  'Hockey':                      '#56CFB2',  // turf teal
+  'Floorball':                   '#00B8A9',  // bright teal-green
+  'Lacrosse':                    '#9966CC',  // royal violet
+  'Netball':                     '#F472B6',  // netball pink
+  'Padel':                       '#48C9B0',  // padel teal
+  'Squash':                      '#48BB78',  // court green
+  'Softball':                    '#FFD700',  // softball yellow
+  'Table Tennis':                '#FF6F61',  // paddle red
+  'Tennis':                      '#F2C94C',  // tennis-ball yellow
+  'Volleyball':                  '#FFB74D',  // volleyball orange
+  'Beach Volley':                '#FFD166',  // sandy yellow
+  'Waterpolo':                   '#4DD9D0',  // pool aqua
+  // ── Rugby / gridiron family ──────────────────────────────
+  'Rugby':                       '#C0392B',
+  'Rugby Union':                 '#C0392B',
+  'Rugby League':                '#E07A5F',  // lighter rugby red
+  'Aussie Rules':                '#5A8DEE',  // AFL blue
+  'AFL':                         '#5A8DEE',
+  'Gaelic Football':             '#2E8B57',  // Irish green
+  'Gaelic Hurling':              '#E67E22',  // sliotar orange
+  // ── Combat / individual ──────────────────────────────────
+  'Boxing':                      '#B22222',  // firebrick
+  'MMA':                         '#DC143C',  // crimson
+  'Combat Sports':               '#8B1A1A',  // dark blood red
+  'Gymnastics':                  '#F48C8C',  // ribbon pink
+  'Darts':                       '#1E8449',  // dartboard green
+  'Snooker':                     '#1A8A6E',  // table baize
+  'Horse Racing':                '#8E44AD',  // royal silks
+  // ── Motorsport family — single shared red, sub-cats ignored ─
+  'Motorsport':                  '#E63946',
+  'Motorsports':                 '#E63946',
+  'Motorsport (Formula 1)':      '#E63946',
+  'Formula 1':                   '#E63946',
+  // ── Endurance / outdoor ──────────────────────────────────
+  'Cycling':                     '#F4A261',  // jersey orange
+  'Yachting':                    '#3498DB',  // sea blue
+  // ── Esports — single shared purple, sub-cats ignored ─────
+  'Esports':                     '#7C3AED',
   'Esports (Counter-Strike 2)':  '#7C3AED',
   'Esports (VALORANT)':          '#7C3AED',
   'Esports (Rainbow Six)':       '#7C3AED',
   'Esports (Overwatch)':         '#7C3AED',
-  'Esports (Fighting Games)':    '#7C3AED',
   'Esports (League of Legends)': '#7C3AED',
   'Esports (Dota 2)':            '#7C3AED',
   'Esports (Call of Duty)':      '#7C3AED',
   'Esports (Apex Legends)':      '#7C3AED',
-  'Figure Skating':              '#AED6F1',
-  'Football':                    '#52B788',
-  'Golf':                        '#95D5B2',
-  'Gymnastics':                  '#F48C8C',
-  'Handball':                    '#E59866',
-  'Hockey':                      '#56CFB2',
-  'Horse Racing':                '#D4A5E0',
-  'Ice Hockey':                  '#74B0E0',
-  'Motorsport':                  '#E63946',
-  'Motorsport (Formula 1)':      '#E63946',
-  'Multi-Sport':                 '#F4A535',
-  'Rugby League':                '#E07A5F',
-  'Rugby Union':                 '#C0392B',
-  'Snooker':                     '#1A8A6E',
-  'Table Tennis':                '#2196F3',
-  'Tennis':                      '#F2C94C',
-  'Winter Sports':               '#90D7FF',
-  // ── Additional sports (per SportCategories list) ──────────
-  'Aussie Rules':                '#5A8DEE',
-  'AFL':                         '#5A8DEE',
-  'Bandy':                       '#74B0E0',
-  'Basketball 3x3':              '#F7C948',
-  'Beach Volley':                '#FFA94D',
-  'Biathlon':                    '#90D7FF',
-  'Cross-Country':               '#AEDFF7',
-  'Crossfire':                   '#7C3AED',
-  'Darts':                       '#16A085',
-  'Esports':                     '#7C3AED',
-  'FIFA':                        '#7C3AED',
-  'Floorball':                   '#56CFB2',
-  'Formula 1':                   '#E63946',
-  'Futsal':                      '#52B788',
-  'Gaelic Football':             '#2E8B57',
-  'Gaelic Hurling':              '#FFA500',
-  'Lacrosse':                    '#9966CC',
-  'Motorsports':                 '#E63946',
-  'Netball':                     '#F472B6',
-  'Padel':                       '#48C9B0',
-  'Rugby':                       '#C0392B',
-  'Ski Jumping':                 '#5DADE2',
-  'Softball':                    '#FFD700',
-  'Specials':                    '#9CA3AF',
-  'Squash':                      '#48BB78',
-  'Volleyball':                  '#FFB74D',
-  'Waterpolo':                   '#4DD9D0',
-  'Yachting':                    '#3498DB',
+  'Esports (Fighting Games)':    '#7C3AED',
+  'Crossfire':                   '#37474F',  // gunmetal
+  'FIFA':                        '#1F8345',  // FIFA green
+  // ── Winter ───────────────────────────────────────────────
+  'Winter Sports':               '#90D7FF',  // winter blue
+  'Figure Skating':              '#AED6F1',  // rink pastel
+  'Ice Hockey':                  '#5BA8D8',  // rink ice
+  'Bandy':                       '#74B0E0',  // ice-blue
+  'Ski Jumping':                 '#5DADE2',  // sky blue
+  'Cross-Country':               '#7FB3D5',  // pine-snow
+  'Biathlon':                    '#B8E0F0',  // pale snow
+  // ── Multi / misc ─────────────────────────────────────────
+  'Multi-Sport':                 '#F4A535',  // medal gold
+  'Specials':                    '#9CA3AF',  // neutral grey
 };
 
 // ============================================================

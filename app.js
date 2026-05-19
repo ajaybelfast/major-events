@@ -1814,7 +1814,12 @@ function filterCwSidebar(q) {
 function updateCwUI() {
   const total = cwFilters.sports.size + cwFilters.countries.size + (showOnlyFavourites ? 1 : 0) + (showOnlyTopRevenue ? 1 : 0);
   const badge = document.getElementById('cwActiveBadge');
-  if (badge) { badge.textContent = total || ''; badge.style.display = total ? '' : 'none'; }
+  // Keep badge in the layout always (visibility, not display) so adding/removing
+  // a filter doesn't reflow the header height and shift everything below.
+  if (badge) {
+    badge.textContent = total || '';
+    badge.style.visibility = total ? 'visible' : 'hidden';
+  }
   const btn = document.getElementById('cwClearBtn');
   if (btn) btn.disabled = !total;
 }

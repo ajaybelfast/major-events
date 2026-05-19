@@ -1690,8 +1690,15 @@ body {
   font-size: 12px;
   font-weight: 700;
   border-radius: 10px;
-  padding: 1px 6px;
-  line-height: 1.4;
+  padding: 0 6px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 .cw-search-wrap {
@@ -1703,8 +1710,9 @@ body {
 .cw-search-icon {
   position: absolute;
   left: 18px;
-  top: 50%;
-  transform: translateY(-60%);
+  /* Wrap has 10px bottom-padding, so true input centre = 50% - 5px. */
+  top: calc(50% - 5px);
+  transform: translateY(-50%);
   color: #484f58;
   font-size: 13px;
   pointer-events: none;
@@ -1729,7 +1737,7 @@ body {
 .cw-search-clear {
   position: absolute;
   right: 14px;
-  top: 50%;
+  top: calc(50% - 5px);
   transform: translateY(-50%);
   background: none;
   border: none;
