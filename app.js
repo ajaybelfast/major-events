@@ -253,6 +253,40 @@ function renderSettings() {
   const content = document.getElementById('settingsContent');
   content.innerHTML = '';
   content.appendChild(renderSettingsFavourites());
+  content.appendChild(renderSettingsShortcuts());
+}
+
+function renderSettingsShortcuts() {
+  const section = document.createElement('div');
+  section.className = 'settings-section';
+
+  const header = document.createElement('div');
+  header.className = 'settings-section-header';
+  header.innerHTML = `
+    <span class="settings-section-title"><i class="fa-solid fa-keyboard" style="color:#7ee787"></i> Keyboard shortcuts</span>
+  `;
+  section.appendChild(header);
+
+  const list = document.createElement('div');
+  list.className = 'settings-shortcut-list';
+  const shortcuts = [
+    { key: 'T',   label: 'Go to today' },
+    { key: 'S',   label: 'Focus search' },
+    { key: 'V',   label: 'Cycle view (Timeline → Calendar → Weekly)' },
+    { key: 'Esc', label: 'Close panel · timeline: scroll to start · calendar/weekly: go to today' },
+  ];
+  shortcuts.forEach(s => {
+    const row = document.createElement('div');
+    row.className = 'settings-shortcut-row';
+    row.innerHTML = `
+      <span class="settings-shortcut-label">${s.label}</span>
+      <kbd class="settings-kbd">${s.key}</kbd>
+    `;
+    list.appendChild(row);
+  });
+  section.appendChild(list);
+
+  return section;
 }
 
 function renderSettingsFavourites() {
@@ -2431,12 +2465,14 @@ function initKeyboardShortcuts() {
     const inInput = document.activeElement.tagName === 'INPUT' ||
                     document.activeElement.tagName === 'TEXTAREA';
 
-    // Escape: close settings → match panel → otherwise scroll to start (like logo click)
+    // Escape: close settings → match panel → timeline: scroll to start, calendar/weekly: go to today
     if (e.key === 'Escape' && !inInput) {
       if (isSettingsPanelOpen()) {
         closeSettingsPanel();
       } else if (currentView === 'weekly' && _activeMatchTournament) {
         closeMatchPanel();
+      } else if (currentView === 'calendar' || currentView === 'weekly') {
+        goToToday();
       } else {
         scrollToStart();
       }
@@ -2450,8 +2486,10 @@ function initKeyboardShortcuts() {
     } else if (e.key === 's' || e.key === 'S') {
       e.preventDefault();
       document.getElementById('searchInput').focus();
-    } else if (e.key === 'c' || e.key === 'C') {
-      setView(currentView === 'calendar' ? 'timeline' : 'calendar');
+    } else if (e.key === 'v' || e.key === 'V') {
+      const order = ['timeline', 'calendar', 'weekly'];
+      const i = order.indexOf(currentView);
+      setView(order[(i + 1) % order.length]);
     }
   });
 }

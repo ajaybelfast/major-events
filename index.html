@@ -11,12 +11,18 @@
     // Always refetch CSS — cheap on localhost, prevents stale styles after edits.
     document.getElementById('appStyle').href = 'style.css?v=' + Date.now();
   </script>
+  <script type="module">
+    // Windows has no native flag emoji glyphs; this polyfill lazy-loads a tiny
+    // Twemoji flags-only webfont (~140KB) only on platforms that need it.
+    import { polyfillCountryFlagEmojis } from "https://cdn.jsdelivr.net/npm/country-flag-emoji-polyfill@0.1.8/dist/index.mjs";
+    polyfillCountryFlagEmojis();
+  </script>
 </head>
 <body>
 
 <div class="page-header">
   <div class="header-logo-wrap">
-    <img src="Stake_logo.svg" class="header-logo" alt="Stake" onclick="scrollToStart()" style="cursor:pointer">
+    <img src="Stake_logo.svg" class="header-logo" alt="Stake" onclick="scrollToStart()" style="cursor:pointer" title="Scroll to start (Esc)">
   </div>
   <div class="header-title">
     <h1>Major Sporting Tournaments 2026–2027</h1>
@@ -24,22 +30,22 @@
   </div>
   <div class="header-right">
     <div class="view-toggle">
-      <button class="view-btn on" id="btnTimeline" onclick="setView('timeline')">
+      <button class="view-btn on" id="btnTimeline" onclick="setView('timeline')" title="Timeline view (V to cycle)">
         <i class="fa-solid fa-table-list"></i><span class="view-btn-label">Timeline</span>
       </button>
-      <button class="view-btn" id="btnCalendar" onclick="setView('calendar')">
+      <button class="view-btn" id="btnCalendar" onclick="setView('calendar')" title="Calendar view (V to cycle)">
         <i class="fa-solid fa-calendar-days"></i><span class="view-btn-label">Calendar</span>
       </button>
-      <button class="view-btn" id="btnWeekly" onclick="setView('weekly')">
+      <button class="view-btn" id="btnWeekly" onclick="setView('weekly')" title="Weekly view (V to cycle)">
         <i class="fa-solid fa-list-ul"></i><span class="view-btn-label">Weekly</span>
       </button>
     </div>
     <div class="search-wrap">
       <i class="fa-solid fa-magnifying-glass search-icon"></i>
-      <input type="text" id="searchInput" class="search-input" placeholder="Search tournament…" autocomplete="off">
+      <input type="text" id="searchInput" class="search-input" placeholder="Search tournament (S)…" autocomplete="off" title="Search (S)">
       <div class="search-results" id="searchResults"></div>
     </div>
-    <button class="today-btn" onclick="goToToday()">&#9654; Today</button>
+    <button class="today-btn" onclick="goToToday()" title="Go to today (T)">&#9654; Today</button>
     <button class="settings-btn" onclick="openSettingsPanel()" title="Settings"><i class="fa-solid fa-gear"></i></button>
   </div>
 </div>

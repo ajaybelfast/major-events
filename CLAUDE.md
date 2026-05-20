@@ -115,5 +115,5 @@ The version badge is positioned via `.version-badge` in `style.css`.
 |-----|--------|
 | `T` | Go to today |
 | `S` | Focus search |
-| `C` | Toggle calendar view |
-| `Esc` | Scroll to start (timeline) |
+| `V` | Cycle view: Timeline → Calendar → Weekly |
+| `Esc` | Close open panel; otherwise scroll to start (timeline) or go to today (calendar/weekly) |
