@@ -18,6 +18,7 @@ const SPORT_COLORS = {
   'Basketball 3x3':              '#FFA947',  // 3x3 lighter orange
   'Cricket':                     '#6BCB77',  // pitch green
   'Football':                    '#F0F0F0',  // ⚪ white ball
+  'Soccer':                      '#F0F0F0',  // alias of Football
   'Futsal':                      '#34C759',  // indoor bright green
   'Golf':                        '#95D5B2',  // fairway green
   'Handball':                    '#FF7F50',  // coral
@@ -54,6 +55,9 @@ const SPORT_COLORS = {
   'Motorsports':                 '#E63946',
   'Motorsport (Formula 1)':      '#E63946',
   'Formula 1':                   '#E63946',
+  'Indy Racing':                 '#E63946',
+  'Motorcycle Racing':           '#E63946',
+  'Stock Car Racing':            '#E63946',
   // ── Endurance / outdoor ──────────────────────────────────
   'Cycling':                     '#F4A261',  // jersey orange
   'Yachting':                    '#3498DB',  // sea blue
@@ -144,6 +148,10 @@ const SPORT_ICONS = {
   'Gaelic Hurling':              'fa-solid fa-baseball-bat-ball',
   'Lacrosse':                    'fa-solid fa-baseball-bat-ball',
   'Motorsports':                 'fa-solid fa-flag-checkered',
+  'Indy Racing':                 'fa-solid fa-flag-checkered',
+  'Motorcycle Racing':           'fa-solid fa-motorcycle',
+  'Stock Car Racing':            'fa-solid fa-flag-checkered',
+  'Soccer':                      'fa-solid fa-futbol',
   'Netball':                     'fa-solid fa-basketball',
   'Padel':                       'fa-solid fa-table-tennis-paddle-ball',
   'Rugby':                       'fa-solid fa-football',
