@@ -4,7 +4,14 @@
       "Bash(open *)",
       "Bash(python3 *)",
       "Bash(grep -nB1 -A3 \"weekly-view\\\\|weekly-main-panel\\\\|weekly-year-label\" /Users/a.sharma/Documents/Projects/MajorTournaments/style.css)",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "Bash(git push *)",
+      "Bash(where git-credential-manager *)",
+      "Bash(where git-credential-manager-core *)",
+      "Bash(where git *)",
+      "Bash(git config *)",
+      "Bash(node --check app.js)",
+      "Bash(node --check data.js)"
     ]
   }
 }

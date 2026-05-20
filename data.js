@@ -246,6 +246,13 @@ function parseCountries(country) {
   return country.split(/\s*(?:\/|,|&)\s*/).map(s => s.trim()).filter(Boolean);
 }
 
+// Promotions' `linkedtournaments` column delimits by "|" — explicit choice so
+// tournament names can safely contain commas, ampersands, or slashes.
+function parseLinkedTournaments(str) {
+  if (!str) return [];
+  return str.split('|').map(s => s.trim()).filter(Boolean);
+}
+
 function getFlag(country) {
   if (!country) return '🌐';
   const list = parseCountries(country);

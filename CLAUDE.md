@@ -41,6 +41,33 @@ After `loadData()`, `SPORT_CATEGORIES = [{ category, topRevSport }, …]`. `comp
 - "Top revenue sports only" toggle (`showOnlyTopRevenue`, persisted to `mjr_top_rev_only`) in the timeline filter panel and the cw-sidebar — filters all three views via `getSortedCatData`, `getSortedCountryData`, and `getFilteredTournaments`.
 - Toggle hides itself entirely if `topRevenueSports.size === 0`.
 
+## Promotions
+
+Sport-trading-team feature: manually-created promos (e.g. "EPL refund if your team loses in 90th minute") that traders need to see alongside the tournaments they're attached to. Sourced from a separate `Promotions` tab in the same Google Sheet.
+
+**Sheet columns** (one row per promo):
+- `name` — promo name (required)
+- `description` — what the promo offers (free text)
+- `startdate`, `enddate` — `YYYY-MM-DD`
+- `linkedtournaments` — pipe-delimited tournament names matching `TOURNAMENTS[].name` (e.g. `Wimbledon 2026 | US Open 2026`). Optional when `sport` is set.
+- `sport` — applies the promo to every tournament whose raw `category`, `subCategory`, or rendered `effectiveCategory()` matches this string (case-insensitive). Optional when `linkedtournaments` is set. Examples: `UFC`, `Tennis`, `Esports (VALORANT)`. **At least one of `linkedtournaments` or `sport` is required** — promos with neither are filtered out at parse time.
+
+The tab's published-CSV URL lives in `SHEET_URL_PROMOTIONS` in `app.js`; its `gid` placeholder (`REPLACE_WITH_PROMOTIONS_GID`) must be replaced with the real gid before this lights up. Failure to fetch is non-fatal — the rail and badges simply don't render.
+
+**Parsing:** `loadData()` populates `PROMOTIONS = [{ name, description, startDate, endDate, linkedTournaments, sport }]`. Every row in the sheet is shown — past, present, and future. The only parse-time filter is structural validity (`name && startDate && endDate && (linkedTournaments.length > 0 || sport)`). `PROMOTIONS_BY_TOURNAMENT` is a lowercase-keyed map for O(1) badge lookup per tournament; sport-wide promos are expanded across all matching tournaments at build time (deduped per tournament).
+
+**Surfaces:**
+- **Timeline rail** (`#promoRail`, `buildPromoRail()`): horizontal sticky strip below `.months-header` with one pill per promo, positioned `startDate → endDate`. Overlapping promos lane-pack like the toppin rail. Purple gradient pill with gift icon; click navigates to the first linked tournament; hover shows promo tooltip. Past promos render at 45% opacity (`.promo-pill-past`); single-day icon-only pills get `.promo-pill-icon-only` for centered icon.
+- **Timeline bar badge** (`.bar-promo-btn`): small purple gift icon on tournament bars with linked promos. Mirrors `.bar-fav-btn`: only renders when `widthPx >= 58`. Sits at `right: 4px` alone, `right: 22px` when fav star is also present (`.has-fav.has-promo` → `padding-right: 40px`). Hover lists every active promo for that tournament; click is a no-op.
+- **Calendar/Weekly badge** (`.cal-event-promo-badge`, `.week-event-promo-badge`): same gift icon inline in event rows for any tournament with linked promos. Hover-only tooltip (`showBarPromoTooltip`).
+- **Sidebar Promotions section** (`#sidebarPromoSection`): clickable label in the timeline sidebar at the same Y as the promo rail. Click opens the promo panel.
+- **Promo panel** (`#promoPanel`): slide-in right panel, Active / Upcoming / Past grouping, each promo as a card with name, description, dates, sport chip (cyan), tournament chips (purple, click-to-navigate). Esc closes (priority: promo panel → settings → match panel → view default).
+- **"Active promotions only" filter toggle**: in both the timeline filter panel (`.filter-option-promo`) and the cw-sidebar (inside `#cwSpecialFilters`, the consolidated "Special filters" section). State is `showOnlyPromos`, persisted to `mjr_promo_only`. Hides itself when `PROMOTIONS.length === 0`. Wires into `getSortedCatData`, `getSortedCountryData`, `getFilteredTournaments`, and both filter-button badge counts. Cleared by `clearFilters()` and `clearCwFilters()`.
+- **`hasActivePromo(ev)`**: helper — `true` iff at least one linked promo's `startDate <= today <= endDate`.
+- **`parseLinkedTournaments(str)`** in `data.js` splits on `|`. Explicit choice so tournament names can safely contain commas, ampersands, or slashes.
+
+**Roadmap (deferred):** dedicated "Promotions" view (4th tab), `link`/`featured`/`status` columns, search integration — see memory `project_promotions_feature.md`.
+
 ## Three views
 
 | View | Container | Sidebar |
@@ -60,7 +87,7 @@ User-starred tournaments. Per-edition: keyed by `${name}|${startDate}` so the 20
 - UI surfaces:
   - **Bar ⭐ button** (`.bar-fav-btn`): rendered on multi-day tournament bars in the timeline when `widthPx >= 58`. Adds `.has-fav` to the bar so right padding reserves space. Single-day `event`/`race` star markers do NOT get a fav button in v1.
   - **Timeline filter panel**: a "My favourites only" row prepended in `renderFilterOptions()` above the sport/country list. Cleared by `clearFilters()`.
-  - **Calendar/Weekly sidebar**: a "Favourites" section is injected at the top of `cwSidebarBody` by `buildCwSidebar()` (id `cwFavSection`). Cleared by `clearCwFilters()`.
+  - **Calendar/Weekly sidebar**: the "My favorite events only" toggle lives in the consolidated `#cwSpecialFilters` section (the "Special filters" header at the top of `cwSidebarBody`), alongside the top-revenue and active-promos toggles. All injected by `buildCwSidebar()`. Cleared by `clearCwFilters()`.
 - Filter wiring: `getSortedCatData`, `getSortedCountryData`, and `getFilteredTournaments` all honour `showOnlyFavourites`. The badge count on the timeline filter button and the cw-sidebar badge both include the fav toggle.
 
 ## Settings panel

@@ -33,8 +33,13 @@ function computeTimelineBounds() {
   TOTAL_W        = TOTAL_DAYS * DAY_PX;
 }
 
-function dayOffset(dateStr) {
-  return Math.round((new Date(dateStr) - TIMELINE_START) / 86400000);
+// Accepts either a YYYY-MM-DD string or a Date. Strings are parsed as LOCAL
+// midnight (via parseLocalDate) to match TIMELINE_START — otherwise UTC
+// parsing in non-UTC timezones (e.g. AU) makes dates land on the wrong day
+// (e.g. May 31 ending up at the same offset as June 1).
+function dayOffset(dateOrDate) {
+  const d = (typeof dateOrDate === 'string') ? parseLocalDate(dateOrDate) : dateOrDate;
+  return Math.round((d - TIMELINE_START) / 86400000);
 }
 
 // Parse a YYYY-MM-DD string as local midnight (not UTC) so date comparisons
@@ -43,6 +48,26 @@ function parseLocalDate(str) {
   if (!str) return new Date(NaN);
   const [y, m, d] = str.split('-');
   return new Date(+y, +m - 1, +d);
+}
+
+// Today's date as a YYYY-MM-DD string in the user's local timezone. Using
+// new Date().toISOString() returns the UTC date, which can be off-by-one
+// in non-UTC timezones — e.g. at 9am local in AU, ISO date is still the
+// previous calendar day.
+function todayLocalStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Header date label — format "Wed 20 May 26". Called at init and from
+// refreshAll() so it stays accurate if the page is left open across midnight.
+function updateHeaderDate() {
+  const el = document.getElementById('headerTodayDate');
+  if (!el) return;
+  const d = new Date();
+  const days   = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  el.textContent = `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 // ============================================================
@@ -55,49 +80,62 @@ const SHEET_URL_MATCHES     = `${SHEET_BASE}?gid=531923703&single=true&output=cs
 // Columns: `category` (matches effectiveCategory output, e.g. "Tennis" or
 // "Esports (VALORANT)") and `toprevsport` (yes/no).
 const SHEET_URL_SPORT_CATEGORIES = `${SHEET_BASE}?gid=986148101&single=true&output=csv`;
+// Columns: `name`, `description`, `startdate`, `enddate`, `linkedtournaments` (pipe-delimited tournament names).
+const SHEET_URL_PROMOTIONS = `${SHEET_BASE}?gid=502400076&single=true&output=csv`;
 
 let TOURNAMENTS = [];
 let MATCHES = [];
 let MATCHES_BY_TOURNAMENT = new Map();
 let SPORT_CATEGORIES = []; // [{ category, topRevSport }]
+let PROMOTIONS = []; // [{ name, description, startDate, endDate, linkedTournaments: [] }]
+let PROMOTIONS_BY_TOURNAMENT = new Map(); // lowercase tournament name → [promo, …]
 let _activeMatchTournament = null;
 
 // RFC-4180 CSV parser — handles quoted fields containing commas or newlines.
-function parseCSVRow(line) {
-  const fields = [];
-  let field = '', inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
+// Walks the whole text once and emits rows; a `\n` inside quotes is treated
+// as cell content, not a row terminator. (The old approach split on \r?\n
+// first, which corrupted any row whose cell contained an embedded newline —
+// e.g. a multi-line description typed with Enter in a Google Sheets cell.)
+function parseCSV(text) {
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
     if (inQuotes) {
-      if (ch === '"' && line[i + 1] === '"') { field += '"'; i++; }
+      if (ch === '"' && text[i + 1] === '"') { field += '"'; i++; }
       else if (ch === '"') { inQuotes = false; }
       else { field += ch; }
     } else {
       if (ch === '"') { inQuotes = true; }
-      else if (ch === ',') { fields.push(field); field = ''; }
+      else if (ch === ',') { row.push(field); field = ''; }
+      else if (ch === '\r') { /* skip — handled by following \n */ }
+      else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
       else { field += ch; }
     }
   }
-  fields.push(field);
-  return fields;
+  // Flush trailing field/row if file doesn't end in a newline.
+  if (field.length > 0 || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
+  return rows;
 }
 
 async function fetchSheet(url) {
-  const res   = await fetch(url);
-  const text  = await res.text();
-  const rows  = text.trim().split(/\r?\n/);
-  const heads = parseCSVRow(rows.shift()).map(h => h.trim().toLowerCase());
+  // Cache-bust: Google's published CSV has a 5-min CDN cache and the browser
+  // adds its own — both can serve stale rows after a trader edits the sheet.
+  const bust = url + (url.includes('?') ? '&' : '?') + '_=' + Date.now();
+  const res  = await fetch(bust, { cache: 'no-store' });
+  const text = await res.text();
+  const rows = parseCSV(text).filter(r => r.some(c => c.trim() !== ''));
+  if (rows.length === 0) return [];
+  const heads = rows.shift().map(h => h.trim().toLowerCase());
   const col   = name => heads.indexOf(name);
-  return rows
-    .filter(r => r.trim())
-    .map(row => {
-      const parts = parseCSVRow(row);
-      return name => (parts[col(name)] || '').trim();
-    });
+  return rows.map(parts => name => (parts[col(name)] || '').trim());
 }
 
 async function loadData() {
-  const [tournamentRows, matchRows, sportRows] = await Promise.all([
+  const [tournamentRows, matchRows, sportRows, promoRows] = await Promise.all([
     fetchSheet(SHEET_URL_TOURNAMENTS),
     fetchSheet(SHEET_URL_MATCHES).catch(err => {
       console.error('Failed to load Matches tab:', err);
@@ -105,6 +143,10 @@ async function loadData() {
     }),
     fetchSheet(SHEET_URL_SPORT_CATEGORIES).catch(err => {
       console.warn('Failed to load SportCategories tab (this is fine if you haven\'t set up the gid yet):', err);
+      return [];
+    }),
+    fetchSheet(SHEET_URL_PROMOTIONS).catch(err => {
+      console.warn('Failed to load Promotions tab (this is fine if you haven\'t set up the gid yet):', err);
       return [];
     }),
   ]);
@@ -155,6 +197,76 @@ async function loadData() {
       topRevSport: get('toprevsport').toLowerCase() === 'yes',
     }))
     .filter(r => r.category);
+
+  // Promotions: traders enter manually-created promos. A promo can be tied
+  // either to specific tournaments (`linkedtournaments`, pipe-delimited) or
+  // to a whole sport/category (`sport`) — or both. Everything in the sheet
+  // is shown (no expiry filter); the only filter is structural validity.
+  PROMOTIONS = promoRows
+    .map(get => {
+      const startDate = get('startdate');
+      const endDate   = get('enddate') || startDate;
+      return {
+        name:               get('name'),
+        description:        get('description'),
+        startDate,
+        endDate,
+        linkedTournaments:  parseLinkedTournaments(get('linkedtournaments')),
+        sport:              get('sport'),
+      };
+    })
+    .filter(p => p.name && p.startDate && p.endDate && (p.linkedTournaments.length > 0 || p.sport));
+
+  // Build the by-tournament map. Sport-wide promos expand to every tournament
+  // whose raw category, sub-category, or effectiveCategory matches the sport
+  // string (case-insensitive). A tournament that's directly linked AND also
+  // matches a promo's sport is only recorded once (Set per tournament).
+  PROMOTIONS_BY_TOURNAMENT = new Map();
+  const recordedPairs = new Set(); // "<tournamentKey>|<promoIndex>" guard
+  PROMOTIONS.forEach((p, idx) => {
+    const addPromoTo = name => {
+      const key = name.toLowerCase();
+      const pairKey = `${key}|${idx}`;
+      if (recordedPairs.has(pairKey)) return;
+      recordedPairs.add(pairKey);
+      if (!PROMOTIONS_BY_TOURNAMENT.has(key)) PROMOTIONS_BY_TOURNAMENT.set(key, []);
+      PROMOTIONS_BY_TOURNAMENT.get(key).push(p);
+    };
+    p.linkedTournaments.forEach(addPromoTo);
+    if (p.sport) {
+      const target = p.sport.toLowerCase();
+      TOURNAMENTS.forEach(ev => {
+        if ((ev.category && ev.category.toLowerCase() === target) ||
+            (ev.subCategory && ev.subCategory.toLowerCase() === target) ||
+            (effectiveCategory(ev).toLowerCase() === target)) {
+          addPromoTo(ev.name);
+        }
+      });
+    }
+  });
+}
+
+function getPromotionsForTournament(name) {
+  return PROMOTIONS_BY_TOURNAMENT.get((name || '').toLowerCase()) || [];
+}
+
+// "Has an active promo" = at least one linked promo whose date range includes today.
+function hasActivePromo(ev) {
+  const todayStr = todayLocalStr();
+  return getPromotionsForTournament(ev.name)
+    .some(p => p.startDate <= todayStr && todayStr <= p.endDate);
+}
+
+// ============================================================
+//  PROMOTIONS FILTER STATE
+// ============================================================
+let showOnlyPromos = false;
+function loadPromoFilter() {
+  try { showOnlyPromos = localStorage.getItem('mjr_promo_only') === '1'; }
+  catch { showOnlyPromos = false; }
+}
+function savePromoFilter() {
+  try { localStorage.setItem('mjr_promo_only', showOnlyPromos ? '1' : '0'); } catch {}
 }
 
 function getMatchesForTournament(tournamentName) {
@@ -507,46 +619,28 @@ function getSortedCountryData() {
       .map(d => ({ ...d, events: d.events.filter(isFavourite) }))
       .filter(d => d.events.length > 0);
   }
-
-  function makeCountryEntry(country, events, isLiveSlice) {
-    const { laneCount, rowHeight } = assignCountryLanes(events);
-    let isActive = false, nextMs = null;
-    events.forEach(ev => {
-      const s = new Date(ev.startDate).getTime();
-      const e = new Date(ev.endDate).getTime() + 86400000;
-      if (todayMs >= s && todayMs < e) isActive = true;
-      else if (s > todayMs && (nextMs === null || s < nextMs)) nextMs = s;
-    });
-    return { country, events, laneCount, rowHeight, isLiveSlice, isActive, nextMs };
+  if (showOnlyPromos) {
+    source = source
+      .map(d => ({ ...d, events: d.events.filter(hasActivePromo) }))
+      .filter(d => d.events.length > 0);
   }
 
-  const liveEntries = [], restEntries = [];
-
-  source.forEach(({ country, events }) => {
-    const active = events.filter(ev => {
-      const s = new Date(ev.startDate).getTime();
-      const e = new Date(ev.endDate).getTime() + 86400000;
-      return todayMs >= s && todayMs < e;
-    });
-    const rest = events.filter(ev => new Date(ev.startDate).getTime() > todayMs);
-
-    if (active.length > 0) {
-      liveEntries.push(makeCountryEntry(country, active, true));
-      if (rest.length > 0) restEntries.push(makeCountryEntry(country, rest, false));
-    } else {
-      restEntries.push(makeCountryEntry(country, events, false));
-    }
-  });
-
-  liveEntries.sort((a, b) => a.country.localeCompare(b.country));
-  restEntries.sort((a, b) => {
-    if (a.nextMs && !b.nextMs) return -1;
-    if (!a.nextMs && b.nextMs) return 1;
-    if (a.nextMs && b.nextMs)  return a.nextMs - b.nextMs;
-    return a.country.localeCompare(b.country);
-  });
-
-  return [...liveEntries, ...restEntries];
+  // One row per country, sorted alphabetically — matches the A–Z mode's
+  // "everything in one place" philosophy. The NOW badge still appears for
+  // countries with any currently-live event (driven by isActive).
+  return source
+    .map(({ country, events }) => {
+      const { laneCount, rowHeight } = assignCountryLanes(events);
+      let isActive = false, nextMs = null;
+      events.forEach(ev => {
+        const s = new Date(ev.startDate).getTime();
+        const e = new Date(ev.endDate).getTime() + 86400000;
+        if (todayMs >= s && todayMs < e) isActive = true;
+        else if (s > todayMs && (nextMs === null || s < nextMs)) nextMs = s;
+      });
+      return { country, events, laneCount, rowHeight, isLiveSlice: false, isActive, nextMs };
+    })
+    .sort((a, b) => a.country.localeCompare(b.country));
 }
 
 // ============================================================
@@ -561,7 +655,7 @@ function buildMonthHeaders() {
   d.setDate(1);
 
   while (d < TIMELINE_END) {
-    const off         = dayOffset(d.toISOString().split('T')[0]);
+    const off         = dayOffset(d);
     const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
     const leftPx      = Math.max(0, off * DAY_PX);
 
@@ -586,7 +680,7 @@ function buildMonthHeaders() {
   }
 
   // TODAY label
-  const todayOffH = dayOffset(new Date().toISOString().split('T')[0]);
+  const todayOffH = dayOffset(new Date());
   if (todayOffH >= 0 && todayOffH <= TOTAL_DAYS) {
     const todayLbl = document.createElement('div');
     todayLbl.className  = 'today-header-label';
@@ -651,6 +745,268 @@ function buildMonthHeaders() {
 }
 
 // ============================================================
+//  BUILD: PROMOTIONS RAIL
+// ============================================================
+// Horizontal rail above the timeline rows that surfaces all active and
+// upcoming promotions. Each promo becomes a pill positioned at startDate
+// → endDate. Overlapping promos stack into lanes. Hides itself when empty.
+function buildPromoRail() {
+  const rail = document.getElementById('promoRail');
+  const sidebarSection = document.getElementById('sidebarPromoSection');
+  if (!rail) return;
+  rail.innerHTML = '';
+  if (sidebarSection) sidebarSection.innerHTML = '';
+  rail.style.width = TOTAL_W + 'px';
+
+  if (PROMOTIONS.length === 0) {
+    rail.classList.add('promo-rail-empty');
+    if (sidebarSection) sidebarSection.classList.add('sidebar-promo-section-empty');
+    return;
+  }
+  rail.classList.remove('promo-rail-empty');
+  if (sidebarSection) sidebarSection.classList.remove('sidebar-promo-section-empty');
+
+  // Clip to the visible timeline window; sort left-to-right for lane packing.
+  const items = PROMOTIONS
+    .map(p => {
+      const startOff = dayOffset(p.startDate);
+      const endOff   = dayOffset(p.endDate);
+      return {
+        p,
+        x:     startOff * DAY_PX,
+        width: Math.max(DAY_PX, (endOff - startOff + 1) * DAY_PX),
+        endX:  (endOff + 1) * DAY_PX,
+      };
+    })
+    .filter(it => it.endX > 0 && it.x < TOTAL_W)
+    .sort((a, b) => a.x - b.x);
+
+  // Greedy lane packing — same approach as the toppin rail.
+  const laneEnd = [];
+  items.forEach(it => {
+    let lane = laneEnd.findIndex(right => right <= it.x);
+    if (lane === -1) lane = laneEnd.length;
+    laneEnd[lane] = it.x + it.width;
+    it.lane = lane;
+  });
+
+  const LANE_H = 24;
+  const railHeight = Math.max(1, laneEnd.length) * LANE_H + 6;
+  rail.style.height = railHeight + 'px';
+
+  // Mirror the rail height in the sidebar so the "Promotions" label sits at
+  // the same Y as the pills, regardless of lane count. The label itself is
+  // clickable and opens the promo panel.
+  if (sidebarSection) {
+    sidebarSection.style.height = railHeight + 'px';
+    sidebarSection.innerHTML = `
+      <i class="fa-solid fa-gift sidebar-promo-icon"></i>
+      <span class="sidebar-promo-label">Promotions</span>
+      <span class="sidebar-promo-count">${PROMOTIONS.length}</span>
+    `;
+    sidebarSection.classList.add('sidebar-promo-clickable');
+    sidebarSection.title = 'See all promotions';
+    sidebarSection.onclick = openPromoPanel;
+  }
+
+  const todayStr = todayLocalStr();
+  items.forEach(it => {
+    const pill = document.createElement('div');
+    const isPast = it.p.endDate < todayStr;
+    pill.className   = 'promo-pill' + (isPast ? ' promo-pill-past' : '');
+    pill.style.left  = Math.max(0, it.x) + 'px';
+    pill.style.width = Math.min(it.width, TOTAL_W - Math.max(0, it.x)) + 'px';
+    pill.style.top   = (it.lane * LANE_H + 3) + 'px';
+
+    const showLabel = it.width >= 80;
+    pill.innerHTML = showLabel
+      ? `<i class="fa-solid fa-gift promo-pill-icon"></i><span class="promo-pill-name">${it.p.name}</span>`
+      : `<i class="fa-solid fa-gift promo-pill-icon"></i>`;
+    if (!showLabel) pill.classList.add('promo-pill-icon-only');
+
+    pill.addEventListener('mouseenter', e => showPromoTooltip(e, it.p));
+    pill.addEventListener('mousemove',  moveTooltip);
+    pill.addEventListener('mouseleave', hideTooltip);
+    pill.addEventListener('click', () => {
+      // If the promo links to a tournament that's on-screen, scroll to it.
+      const first = it.p.linkedTournaments[0];
+      if (!first) return;
+      const ev = TOURNAMENTS.find(t => t.name.toLowerCase() === first.toLowerCase());
+      if (ev) navigateToEvent(ev);
+    });
+
+    rail.appendChild(pill);
+  });
+}
+
+function showPromoTooltip(e, promo) {
+  const dateLabel = promo.startDate === promo.endDate
+    ? fmtDate(promo.startDate)
+    : `${fmtDate(promo.startDate)} – ${fmtDate(promo.endDate)}`;
+  const sportRow = promo.sport
+    ? `<div class="tt-row"><i class="fa-solid fa-layer-group tt-icon"></i><span class="tt-text">Sport: ${promo.sport}</span></div>`
+    : '';
+  const tournamentsRow = promo.linkedTournaments.length
+    ? `<div class="tt-row"><i class="fa-solid fa-trophy tt-icon"></i><span class="tt-text">${promo.linkedTournaments.join(', ')}</span></div>`
+    : '';
+  tooltip.innerHTML = `
+    <div class="tt-sport" style="color:#c084fc"><i class="fa-solid fa-gift"></i> Promotion</div>
+    <div class="tt-name">${promo.name}</div>
+    ${promo.description ? `<div class="tt-promo-desc">${promo.description}</div>` : ''}
+    <div class="tt-row"><i class="fa-solid fa-calendar tt-icon"></i><span class="tt-text">${dateLabel}</span></div>
+    ${sportRow}
+    ${tournamentsRow}
+  `;
+  tooltip.classList.add('visible');
+  moveTooltip(e);
+}
+
+// Bar-badge tooltip — lists every active promo for a single tournament. Used
+// when the user hovers the gift icon embedded in the tournament bar.
+function showBarPromoTooltip(e, promos) {
+  const rows = promos.map(p => {
+    const dateLabel = p.startDate === p.endDate
+      ? fmtDate(p.startDate)
+      : `${fmtDate(p.startDate)} – ${fmtDate(p.endDate)}`;
+    return `
+      <div class="tt-promo-item">
+        <div class="tt-promo-name">${p.name}</div>
+        ${p.description ? `<div class="tt-promo-desc">${p.description}</div>` : ''}
+        <div class="tt-promo-date">${dateLabel}</div>
+      </div>
+    `;
+  }).join('');
+  tooltip.innerHTML = `
+    <div class="tt-sport" style="color:#c084fc"><i class="fa-solid fa-gift"></i> ${promos.length === 1 ? 'Promotion' : `${promos.length} Promotions`}</div>
+    ${rows}
+  `;
+  tooltip.classList.add('visible');
+  moveTooltip(e);
+}
+
+// ============================================================
+//  PROMOTIONS PANEL
+// ============================================================
+function openPromoPanel() {
+  if (PROMOTIONS.length === 0) return;
+  renderPromoPanel();
+  document.getElementById('promoPanelBackdrop').classList.add('open');
+  const panel = document.getElementById('promoPanel');
+  panel.classList.add('open');
+  panel.setAttribute('aria-hidden', 'false');
+}
+
+function closePromoPanel() {
+  document.getElementById('promoPanelBackdrop').classList.remove('open');
+  const panel = document.getElementById('promoPanel');
+  panel.classList.remove('open');
+  panel.setAttribute('aria-hidden', 'true');
+}
+
+function isPromoPanelOpen() {
+  const panel = document.getElementById('promoPanel');
+  return panel && panel.classList.contains('open');
+}
+
+function renderPromoPanel() {
+  const content = document.getElementById('promoPanelContent');
+  content.innerHTML = '';
+
+  const todayStr = todayLocalStr();
+  const active = [], upcoming = [], past = [];
+  PROMOTIONS.forEach(p => {
+    if (p.endDate < todayStr) past.push(p);
+    else if (p.startDate > todayStr) upcoming.push(p);
+    else active.push(p);
+  });
+  active.sort((a, b)   => a.startDate.localeCompare(b.startDate));
+  upcoming.sort((a, b) => a.startDate.localeCompare(b.startDate));
+  past.sort((a, b)     => b.endDate.localeCompare(a.endDate)); // most recently ended first
+
+  const sections = [
+    { label: 'Active',   items: active,   tone: 'active'   },
+    { label: 'Upcoming', items: upcoming, tone: 'upcoming' },
+    { label: 'Past',     items: past,     tone: 'past'     },
+  ];
+
+  let renderedAny = false;
+  sections.forEach(s => {
+    if (s.items.length === 0) return;
+    renderedAny = true;
+    const section = document.createElement('div');
+    section.className = 'promo-panel-section';
+
+    const header = document.createElement('div');
+    header.className = 'promo-panel-section-header';
+    header.innerHTML = `
+      <span class="promo-panel-section-title">${s.label}</span>
+      <span class="promo-panel-section-count">${s.items.length}</span>
+    `;
+    section.appendChild(header);
+
+    s.items.forEach(p => section.appendChild(renderPromoCard(p, s.tone)));
+    content.appendChild(section);
+  });
+
+  if (!renderedAny) {
+    const empty = document.createElement('div');
+    empty.className = 'promo-panel-empty';
+    empty.textContent = 'No promotions yet. Add rows to the Promotions tab in the sheet.';
+    content.appendChild(empty);
+  }
+}
+
+function renderPromoCard(promo, tone) {
+  const card = document.createElement('div');
+  card.className = `promo-card promo-card-${tone}`;
+
+  const dateLabel = promo.startDate === promo.endDate
+    ? fmtDate(promo.startDate)
+    : `${fmtDate(promo.startDate)} – ${fmtDate(promo.endDate)}`;
+
+  const tournamentChips = promo.linkedTournaments.map(name => {
+    const ev = TOURNAMENTS.find(t => t.name.toLowerCase() === name.toLowerCase());
+    if (ev) {
+      return `<button class="promo-card-chip" data-evname="${ev.name.replace(/"/g, '&quot;')}"><i class="fa-solid fa-trophy"></i>${name}</button>`;
+    }
+    return `<span class="promo-card-chip promo-card-chip-missing" title="Not found in tournaments sheet">${name}</span>`;
+  }).join('');
+
+  // Sport-wide chip — shown when the promo has a `sport` value. Distinct
+  // visual so traders see at a glance "this applies to every UFC event"
+  // rather than mistaking it for a single tournament link.
+  const sportChip = promo.sport
+    ? `<span class="promo-card-chip promo-card-chip-sport" title="Applies to every event in this sport"><i class="fa-solid fa-layer-group"></i>${promo.sport}</span>`
+    : '';
+  const chipsHtml = sportChip + tournamentChips;
+
+  card.innerHTML = `
+    <div class="promo-card-top">
+      <span class="promo-card-name">${promo.name}</span>
+      <span class="promo-card-tone-badge promo-card-tone-${tone}">${tone}</span>
+    </div>
+    ${promo.description ? `<div class="promo-card-desc">${promo.description}</div>` : ''}
+    <div class="promo-card-meta">
+      <i class="fa-solid fa-calendar"></i><span>${dateLabel}</span>
+    </div>
+    ${chipsHtml ? `<div class="promo-card-chips">${chipsHtml}</div>` : ''}
+  `;
+
+  // Wire chip clicks: navigate to the tournament in the timeline and close the panel.
+  card.querySelectorAll('button.promo-card-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const ev = TOURNAMENTS.find(t => t.name === btn.dataset.evname);
+      if (ev) {
+        closePromoPanel();
+        navigateToEvent(ev);
+      }
+    });
+  });
+
+  return card;
+}
+
+// ============================================================
 //  SORT MODE + FILTERS
 // ============================================================
 let sortMode = 'live';
@@ -671,7 +1027,7 @@ function saveFilters() {
 function updateFilterBtn() {
   const btn = document.getElementById('filterBtn');
   if (!btn) return;
-  const count = activeFilters.size + (showOnlyFavourites ? 1 : 0) + (showOnlyTopRevenue ? 1 : 0);
+  const count = activeFilters.size + (showOnlyFavourites ? 1 : 0) + (showOnlyTopRevenue ? 1 : 0) + (showOnlyPromos ? 1 : 0);
   btn.classList.toggle('filter-btn-active', count > 0);
   let badge = btn.querySelector('.filter-badge');
   if (count > 0) {
@@ -713,16 +1069,6 @@ function renderFilterOptions() {
   favLabel.appendChild(favSpan);
   container.appendChild(favLabel);
 
-  // "Manage favorite events" link opens the settings panel.
-  const manage = document.createElement('button');
-  manage.className = 'filter-manage-link';
-  manage.innerHTML = '<i class="fa-solid fa-gear"></i>Manage favorite events…';
-  manage.addEventListener('click', () => {
-    document.getElementById('filterPanel').classList.remove('open');
-    openSettingsPanel();
-  });
-  container.appendChild(manage);
-
   // Top-revenue-sports toggle — only renders if any sports are flagged in the sheet.
   if (topRevenueSports.size > 0) {
     const trLabel = document.createElement('label');
@@ -742,6 +1088,27 @@ function renderFilterOptions() {
     trLabel.appendChild(trCb);
     trLabel.appendChild(trSpan);
     container.appendChild(trLabel);
+  }
+
+  // Active-promos toggle — hides itself when the sheet has no promos.
+  if (PROMOTIONS.length > 0) {
+    const prLabel = document.createElement('label');
+    prLabel.className = 'filter-option filter-option-promo';
+    const prCb = document.createElement('input');
+    prCb.type = 'checkbox';
+    prCb.checked = showOnlyPromos;
+    prCb.addEventListener('change', () => {
+      showOnlyPromos = prCb.checked;
+      savePromoFilter();
+      updateFilterBtn();
+      rebuildViews();
+      if (currentView === 'calendar' || currentView === 'weekly') rebuildCwView();
+    });
+    const prSpan = document.createElement('span');
+    prSpan.innerHTML = '<i class="fa-solid fa-gift" style="color:#c084fc;margin-right:6px"></i>Active promotions only';
+    prLabel.appendChild(prCb);
+    prLabel.appendChild(prSpan);
+    container.appendChild(prLabel);
   }
 
   const sep = document.createElement('div');
@@ -804,9 +1171,11 @@ function clearFilters() {
   activeFilters.clear();
   showOnlyFavourites = false;
   showOnlyTopRevenue = false;
+  showOnlyPromos = false;
   saveFilters();
   saveFavOnly();
   saveTopRevenueFilter();
+  savePromoFilter();
   updateFilterBtn();
   renderFilterOptions();
   rebuildViews();
@@ -867,6 +1236,11 @@ function getSortedCatData() {
   if (showOnlyFavourites) {
     source = source
       .map(d => ({ ...d, events: d.events.filter(isFavourite) }))
+      .filter(d => d.events.length > 0);
+  }
+  if (showOnlyPromos) {
+    source = source
+      .map(d => ({ ...d, events: d.events.filter(hasActivePromo) }))
       .filter(d => d.events.length > 0);
   }
 
@@ -1036,7 +1410,7 @@ function buildTimelineRows() {
   // Month grid lines
   let d = new Date(TIMELINE_START); d.setDate(1);
   while (d < TIMELINE_END) {
-    const off = dayOffset(d.toISOString().split('T')[0]);
+    const off = dayOffset(d);
     if (off >= 0) {
       const gl = document.createElement('div');
       gl.className  = 'grid-line-month';
@@ -1047,7 +1421,7 @@ function buildTimelineRows() {
   }
 
   // Today marker
-  const todayOff = dayOffset(new Date().toISOString().split('T')[0]);
+  const todayOff = dayOffset(new Date());
   if (todayOff >= 0 && todayOff <= TOTAL_DAYS) {
     const tm = document.createElement('div');
     tm.className  = 'today-marker';
@@ -1086,7 +1460,7 @@ function buildTimelineRows() {
       // in-bar label can be suppressed to avoid showing the name twice.
       let willShowTodayLabel = false;
       let todayPxCached = 0;
-      const todayPx = dayOffset(new Date().toISOString().split('T')[0]) * DAY_PX;
+      const todayPx = dayOffset(new Date()) * DAY_PX;
       if (startPx < todayPx && startPx + widthPx > todayPx) {
         const remainingW = startPx + widthPx - todayPx;
         const approxMinW = ev.name.length * 6.5 + 44; // flag + text + padding estimate
@@ -1149,6 +1523,31 @@ function buildTimelineRows() {
           }
         });
         bar.appendChild(favBtn);
+      }
+
+      // Promo badge — indicates this tournament has 1+ active promotions linked
+      // to it. Hover shows the promo list; click is a no-op (tooltip is the
+      // primary affordance). Mirrors the fav star: only renders when bar is wide.
+      const promos = getPromotionsForTournament(ev.name);
+      // Visual highlight (purple ring + glow) when at least one promo is
+      // currently running — applies regardless of bar width, so even narrow
+      // bars get the cue.
+      if (hasActivePromo(ev)) {
+        bar.classList.add('bar-promo-active');
+      }
+      if (promos.length > 0 && widthPx >= 58) {
+        bar.classList.add('has-promo');
+        const promoBtn = document.createElement('button');
+        promoBtn.className = 'bar-promo-btn';
+        promoBtn.title = promos.length === 1
+          ? `Promotion: ${promos[0].name}`
+          : `${promos.length} active promotions`;
+        promoBtn.innerHTML = `<i class="fa-solid fa-gift"></i>`;
+        promoBtn.addEventListener('mouseenter', e => showBarPromoTooltip(e, promos));
+        promoBtn.addEventListener('mousemove',  moveTooltip);
+        promoBtn.addEventListener('mouseleave', hideTooltip);
+        promoBtn.addEventListener('click', e => e.stopPropagation());
+        bar.appendChild(promoBtn);
       }
     }
 
@@ -1346,7 +1745,7 @@ function animateScroll(targetX, duration) {
 
 function scrollToStart() {
   const wrapper = document.getElementById('timelineWrapper');
-  const todayPx = dayOffset(new Date().toISOString().split('T')[0]) * DAY_PX;
+  const todayPx = dayOffset(new Date()) * DAY_PX;
   const targetX = Math.max(0, todayPx - wrapper.clientWidth * 0.25);
   const targetY = 0;
   const startX  = wrapper.scrollLeft;
@@ -1380,7 +1779,7 @@ function goToToday() {
 
 function scrollToToday() {
   const wrapper  = document.getElementById('timelineWrapper');
-  const todayPx  = dayOffset(new Date().toISOString().split('T')[0]) * DAY_PX;
+  const todayPx  = dayOffset(new Date()) * DAY_PX;
   const targetX  = Math.max(0, todayPx - wrapper.clientWidth * 0.25);
   animateScroll(targetX, 1400);
 }
@@ -1403,11 +1802,11 @@ function scrollToEl(container, targetEl, smooth = true) {
 }
 
 function scrollToWeekEvent(ev) {
-  const evDate    = new Date(ev.startDate);
+  const evDate    = parseLocalDate(ev.startDate);
   const container = document.getElementById('weeklyMainPanel') || document.getElementById('weeklyView');
   const sections  = container.querySelectorAll('.week-section[data-week-start]');
   for (const section of sections) {
-    const ws = new Date(section.dataset.weekStart);
+    const ws = parseLocalDate(section.dataset.weekStart);
     const we = new Date(ws); we.setDate(we.getDate() + 6);
     if (evDate >= ws && evDate <= we) {
       scrollToEl(container, section);
@@ -1439,7 +1838,13 @@ function scrollToCalendarEvent(ev) {
 function navigateToEvent(ev, horizontalOnly = false) {
   const wrapper = document.getElementById('timelineWrapper');
   const bars    = document.querySelectorAll(`[data-ev-name="${ev.name.replace(/"/g, '\\"')}"]`);
-  const targetX = Math.max(0, dayOffset(ev.startDate) * DAY_PX - wrapper.clientWidth * 0.25);
+  // For ongoing events, anchor on today's column instead of startDate so we
+  // don't scroll the user months into the past just to find an active bar.
+  const todayStr = todayLocalStr();
+  const anchorDate = (ev.startDate <= todayStr && todayStr <= ev.endDate)
+    ? todayStr
+    : ev.startDate;
+  const targetX = Math.max(0, dayOffset(anchorDate) * DAY_PX - wrapper.clientWidth * 0.25);
 
   let targetY = wrapper.scrollTop;
   if (!horizontalOnly && bars.length > 0) {
@@ -1677,32 +2082,37 @@ const cwFilters = { sports: new Set(), countries: new Set() };
 
 function getFilteredTournaments() {
   const { sports, countries } = cwFilters;
-  if (!sports.size && !countries.size && !showOnlyFavourites && !showOnlyTopRevenue) return TOURNAMENTS;
+  if (!sports.size && !countries.size && !showOnlyFavourites && !showOnlyTopRevenue && !showOnlyPromos) return TOURNAMENTS;
   return TOURNAMENTS.filter(ev => {
     const sportOk   = !sports.size   || sports.has(effectiveCategory(ev));
     const countryOk = !countries.size || countries.has(ev.country);
     const favOk     = !showOnlyFavourites || isFavourite(ev);
     const topRevOk  = !showOnlyTopRevenue || isTopRevenueSport(effectiveCategory(ev));
-    return sportOk && countryOk && favOk && topRevOk;
+    const promoOk   = !showOnlyPromos || hasActivePromo(ev);
+    return sportOk && countryOk && favOk && topRevOk && promoOk;
   });
 }
 
 function buildCwSidebar() {
-  // Favourites toggle — injected as the first section of the cw sidebar body.
+  // Single "Special filters" section consolidating the toggles that don't fit
+  // the sport/country lists: favorite events, top-revenue sports, active promos.
+  // Each toggle still hides itself if its underlying data is empty.
   const body = document.getElementById('cwSidebarBody');
-  let favSection = document.getElementById('cwFavSection');
-  if (!favSection) {
-    favSection = document.createElement('div');
-    favSection.className = 'cw-section';
-    favSection.id = 'cwFavSection';
-    favSection.innerHTML = `
-      <div class="cw-section-title">Favorite Events</div>
-      <div class="cw-filter-list" id="cwFavList"></div>
+  let special = document.getElementById('cwSpecialFilters');
+  if (!special) {
+    special = document.createElement('div');
+    special.className = 'cw-section';
+    special.id = 'cwSpecialFilters';
+    special.innerHTML = `
+      <div class="cw-section-title">Special filters</div>
+      <div class="cw-filter-list" id="cwSpecialList"></div>
     `;
-    body.insertBefore(favSection, body.firstChild);
+    body.insertBefore(special, body.firstChild);
   }
-  const favList = document.getElementById('cwFavList');
-  favList.innerHTML = '';
+  const specialList = document.getElementById('cwSpecialList');
+  specialList.innerHTML = '';
+
+  // Favourites — always rendered.
   const favItem = document.createElement('div');
   favItem.className = 'cw-filter-item' + (showOnlyFavourites ? ' cw-active' : '');
   favItem.dataset.label = 'favorites favorite events my favorite events only';
@@ -1715,24 +2125,10 @@ function buildCwSidebar() {
     rebuildCwView();
     updateFilterBtn();
   });
-  favList.appendChild(favItem);
+  specialList.appendChild(favItem);
 
-  // Top-revenue toggle — only injects when any sport is flagged in the sheet.
-  let trSection = document.getElementById('cwTopRevSection');
+  // Top-revenue — only when the sheet has flagged sports.
   if (topRevenueSports.size > 0) {
-    if (!trSection) {
-      trSection = document.createElement('div');
-      trSection.className = 'cw-section';
-      trSection.id = 'cwTopRevSection';
-      trSection.innerHTML = `
-        <div class="cw-section-title">Top revenue</div>
-        <div class="cw-filter-list" id="cwTopRevList"></div>
-      `;
-      const favSec = document.getElementById('cwFavSection');
-      body.insertBefore(trSection, favSec.nextSibling);
-    }
-    const trList = document.getElementById('cwTopRevList');
-    trList.innerHTML = '';
     const trItem = document.createElement('div');
     trItem.className = 'cw-filter-item' + (showOnlyTopRevenue ? ' cw-active' : '');
     trItem.dataset.label = 'top revenue sports only';
@@ -1745,10 +2141,32 @@ function buildCwSidebar() {
       rebuildCwView();
       updateFilterBtn();
     });
-    trList.appendChild(trItem);
-  } else if (trSection) {
-    trSection.remove();
+    specialList.appendChild(trItem);
   }
+
+  // Active promotions — only when promos exist.
+  if (PROMOTIONS.length > 0) {
+    const promoItem = document.createElement('div');
+    promoItem.className = 'cw-filter-item' + (showOnlyPromos ? ' cw-active' : '');
+    promoItem.dataset.label = 'promotions active promos only';
+    promoItem.innerHTML = `<i class="fa-solid fa-gift" style="color:#c084fc;width:14px;text-align:center;flex-shrink:0;font-size:12px"></i><span class="cw-filter-label">Active promotions only</span>`;
+    promoItem.addEventListener('click', () => {
+      showOnlyPromos = !showOnlyPromos;
+      savePromoFilter();
+      promoItem.classList.toggle('cw-active', showOnlyPromos);
+      updateCwUI();
+      rebuildCwView();
+      updateFilterBtn();
+    });
+    specialList.appendChild(promoItem);
+  }
+
+  // Clean up any legacy sections from earlier builds where these had their own
+  // headers — safe even on fresh DOM (querySelectorAll returns empty NodeList).
+  ['cwFavSection', 'cwTopRevSection', 'cwPromoSection'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.remove();
+  });
 
   buildCwSportList();
   buildCwList(
@@ -1846,7 +2264,7 @@ function filterCwSidebar(q) {
 }
 
 function updateCwUI() {
-  const total = cwFilters.sports.size + cwFilters.countries.size + (showOnlyFavourites ? 1 : 0) + (showOnlyTopRevenue ? 1 : 0);
+  const total = cwFilters.sports.size + cwFilters.countries.size + (showOnlyFavourites ? 1 : 0) + (showOnlyTopRevenue ? 1 : 0) + (showOnlyPromos ? 1 : 0);
   const badge = document.getElementById('cwActiveBadge');
   // Keep badge in the layout always (visibility, not display) so adding/removing
   // a filter doesn't reflow the header height and shift everything below.
@@ -1863,8 +2281,10 @@ function clearCwFilters() {
   cwFilters.countries.clear();
   showOnlyFavourites = false;
   showOnlyTopRevenue = false;
+  showOnlyPromos = false;
   saveFavOnly();
   saveTopRevenueFilter();
+  savePromoFilter();
   updateFilterBtn();
   document.getElementById('cwSearchInput').value = '';
   filterCwSidebar('');
@@ -2012,7 +2432,7 @@ function buildWeeklyView() {
 
         const section = document.createElement('div');
         section.className = 'week-section' + (isCurrentWeek ? ' week-current' : '') + (isPastWeek ? ' week-past' : '');
-        section.dataset.weekStart = weekStart.toISOString().split('T')[0];
+        section.dataset.weekStart = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`;
 
         const hdr = document.createElement('div');
         hdr.className = 'week-header';
@@ -2040,9 +2460,11 @@ function buildWeeklyView() {
             const showStart   = isStartHere && spansMulti;
             const showEnd     = isEndHere   && spansMulti;
 
+            const isPast = endD < today;
             const item = document.createElement('div');
             item.className   = 'week-event-item'
-              + (ev.highlight ? ' week-event-highlight' : '');
+              + (ev.highlight ? ' week-event-highlight' : '')
+              + (isPast ? ' week-event-past' : '');
             item.dataset.evName = ev.name;
 
             const icon = document.createElement('i');
@@ -2126,6 +2548,23 @@ function buildWeeklyView() {
               const dot = document.createElement('span');
               dot.className = 'week-event-live-dot';
               item.appendChild(dot);
+            } else {
+              item.appendChild(document.createElement('span'));
+            }
+
+            // Promo badge — small purple gift, hover-tooltip lists every promo.
+            // Always append a slot (badge or empty span) so the grid stays aligned.
+            const evPromos = getPromotionsForTournament(ev.name);
+            if (evPromos.length > 0) {
+              const badge = document.createElement('i');
+              badge.className = 'fa-solid fa-gift week-event-promo-badge';
+              badge.addEventListener('mouseenter', e => {
+                e.stopPropagation();
+                showBarPromoTooltip(e, evPromos);
+              });
+              badge.addEventListener('mousemove', e => { e.stopPropagation(); moveTooltip(e); });
+              badge.addEventListener('mouseleave', e => { e.stopPropagation(); hideTooltip(); });
+              item.appendChild(badge);
             } else {
               item.appendChild(document.createElement('span'));
             }
@@ -2406,15 +2845,32 @@ function buildCalendarView() {
         const showStart   = isStartHere && spansMulti;
         const showEnd     = isEndHere   && spansMulti;
 
+        const isPast = endD < today;
         const item = document.createElement('div');
         item.className = 'cal-event-item'
           + (ev.highlight ? ' cal-event-highlight' : '')
-          + (isLive ? ' cal-event-live' : '');
+          + (isLive ? ' cal-event-live' : '')
+          + (isPast ? ' cal-event-past' : '');
         item.dataset.evName = ev.name;
 
         const icon = document.createElement('i');
         icon.className = iconCls;
         icon.style.color = color;
+
+        // Promo badge — tournaments with linked promos get a small purple gift
+        // icon. Hover lists every promo. Renders inline next to the sport icon.
+        const evPromos = getPromotionsForTournament(ev.name);
+        let calPromoBadge = null;
+        if (evPromos.length > 0) {
+          calPromoBadge = document.createElement('i');
+          calPromoBadge.className = 'fa-solid fa-gift cal-event-promo-badge';
+          calPromoBadge.addEventListener('mouseenter', e => {
+            e.stopPropagation();
+            showBarPromoTooltip(e, evPromos);
+          });
+          calPromoBadge.addEventListener('mousemove', e => { e.stopPropagation(); moveTooltip(e); });
+          calPromoBadge.addEventListener('mouseleave', e => { e.stopPropagation(); hideTooltip(); });
+        }
 
         const calMarkerSlot = document.createElement('span');
         calMarkerSlot.className = 'start-marker-slot';
@@ -2437,6 +2893,7 @@ function buildCalendarView() {
         item.appendChild(icon);
         item.appendChild(calMarkerSlot);
         item.appendChild(name);
+        item.appendChild(calPromoBadge || document.createElement('span'));
 
         item.addEventListener('mouseenter', e => showTooltip(e, ev, color));
         item.addEventListener('mousemove',  moveTooltip);
@@ -2465,9 +2922,11 @@ function initKeyboardShortcuts() {
     const inInput = document.activeElement.tagName === 'INPUT' ||
                     document.activeElement.tagName === 'TEXTAREA';
 
-    // Escape: close settings → match panel → timeline: scroll to start, calendar/weekly: go to today
+    // Escape: close promo panel → settings → match panel → timeline: scroll to start, calendar/weekly: go to today
     if (e.key === 'Escape' && !inInput) {
-      if (isSettingsPanelOpen()) {
+      if (isPromoPanelOpen()) {
+        closePromoPanel();
+      } else if (isSettingsPanelOpen()) {
         closeSettingsPanel();
       } else if (currentView === 'weekly' && _activeMatchTournament) {
         closeMatchPanel();
@@ -2506,7 +2965,10 @@ async function init() {
     buildData();
     computeTopRevenueSports();
     loadTopRevenueFilter();
+    loadPromoFilter();
+    updateHeaderDate();
     buildMonthHeaders();
+    buildPromoRail();
     loadFavourites();
     loadFilters();
     buildSidebar();
@@ -2563,7 +3025,9 @@ async function refreshAll() {
     await loadData();
     computeTimelineBounds();
     buildData();
+    updateHeaderDate();
     buildMonthHeaders();
+    buildPromoRail();
     buildSidebar();
     buildTimelineRows();
     buildCwSidebar();

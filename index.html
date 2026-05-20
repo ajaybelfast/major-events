@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Major Sporting Tournaments 2026–2027</title>
+  <title>Sports Calendar</title>
   <link rel="icon" type="image/webp" href="favicon-32x32.webp" sizes="32x32">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" id="appStyle">
@@ -25,8 +25,8 @@
     <img src="Stake_logo.svg" class="header-logo" alt="Stake" onclick="scrollToStart()" style="cursor:pointer" title="Scroll to start (Esc)">
   </div>
   <div class="header-title">
-    <h1>Major Sporting Tournaments 2026–2027</h1>
-    <p>Click and drag to scroll &middot; Hover over any event for details</p>
+    <h1>Sports Calendar</h1>
+    <div class="header-today-date" id="headerTodayDate"></div>
   </div>
   <div class="header-right">
     <div class="view-toggle">
@@ -68,6 +68,7 @@
         <button class="sort-btn"    id="btnCountry" onclick="setSort('country')"><i class="fa-solid fa-globe"></i> Country</button>
       </div>
     </div>
+    <div class="sidebar-promo-section" id="sidebarPromoSection"></div>
     <div id="sidebarRows"></div>
   </div>
   <div class="filter-panel" id="filterPanel">
@@ -79,6 +80,7 @@
   <div class="timeline-wrapper" id="timelineWrapper">
     <div class="timeline">
       <div class="months-header" id="monthsHeader"></div>
+      <div class="promo-rail" id="promoRail"></div>
       <div class="timeline-rows" id="timelineRows"></div>
     </div>
   </div>
@@ -124,6 +126,15 @@
     <button class="settings-close" onclick="closeSettingsPanel()" title="Close">&times;</button>
   </div>
   <div class="settings-content" id="settingsContent"></div>
+</aside>
+
+<div class="promo-panel-backdrop" id="promoPanelBackdrop" onclick="closePromoPanel()"></div>
+<aside class="promo-panel" id="promoPanel" aria-hidden="true">
+  <div class="promo-panel-header">
+    <span class="promo-panel-title"><i class="fa-solid fa-gift"></i> Promotions</span>
+    <button class="promo-panel-close" onclick="closePromoPanel()" title="Close">&times;</button>
+  </div>
+  <div class="promo-panel-content" id="promoPanelContent"></div>
 </aside>
 
 <div class="version-badge" id="versionBadge"></div>
