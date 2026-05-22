@@ -1,5 +1,15 @@
-// Tournament data is now loaded from Google Sheets — see SHEET_URL in app.js.
-// Edit the sheet directly to add or update events.
+// ============================================================
+//  LOOKUPS
+// ============================================================
+// Static lookup tables used everywhere — sport colours / icons /
+// esports logos, country flags, plus the small CSV-cell parsers
+// (parseCountries, parseLinkedTournaments). Loaded as a classic
+// script (not an ES module) so the constants and helpers become
+// globals that ES modules can reference without importing.
+//
+// Tournament data itself (events, matches, promotions) is fetched
+// at runtime by `./core/data.js` from the published Google Sheets
+// CSV — edit the sheet to add or update events, not this file.
 
 // ============================================================
 //  SPORT COLORS

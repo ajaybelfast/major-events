@@ -13,126 +13,201 @@ python3 -m http.server 8080
 
 ## Architecture
 
-Single-page vanilla JS app. No framework, no bundler, no dependencies beyond Font Awesome (CDN).
+Vanilla JS, ES modules. No framework, no bundler, no dependencies beyond Font Awesome (CDN) and a country-flag-emoji polyfill (lazy-loaded only on Windows).
 
-**File roles:**
-- `data.js` — global constants only: `SPORT_COLORS`, `SPORT_ICONS`, `ESPORTS_LOGOS`, `getFlag()`. Loaded first so app.js can reference these globals.
-- `app.js` — all application logic: data fetching, view rendering, filtering, sorting, search, scroll behaviour.
-- `style.css` — all styling for all three views.
-- `index.html` — static markup shell. Both view containers (`#mainView` for timeline, `#cwLayout` for calendar/weekly) are always in the DOM; `setView()` shows/hides them.
-- `tournaments.csv` — reference snapshot only, not loaded by the app.
+The codebase is split into three module folders plus a thin orchestrator at the root:
 
-**Data source:** Tournament data is fetched at runtime from a published Google Sheets CSV (`SHEET_URL` in app.js). Edit the sheet to add/update events — do not edit `data.js` for tournament data.
+```
+/
+├── index.html
+├── app.js              ← orchestrator: imports, init(), refreshAll(), wireDomHandlers()
+├── lookups.js          ← classic-script globals: SPORT_COLORS, SPORT_ICONS, FLAGS, …
+├── style.css
+├── CLAUDE.md
+├── assets/             ← shipped as-is: Stake_logo.svg, favicon-32x32.webp, tournaments.csv
+├── core/               ← shared foundation
+├── features/           ← stateful feature modules
+└── views/              ← DOM-rendering modules
+```
 
-**Data shape:** Each CSV row produces either a `TOURNAMENTS[]` entry or a `MATCHES[]` entry (when `format === 'match'`). Key `format` values: `tournament`, `season`, `event`, `race`, `onedayevent`, `match`. The `match` format is excluded from `TOURNAMENTS` and linked to a parent tournament by name. Rows may carry a `sub-category` field (e.g. Esports games like "VALORANT"); `effectiveCategory(ev)` returns `"Category (sub-category)"` for these — except for categories listed in `NO_SUBCATEGORY_SPLIT` (currently `Yachting`), which always collapse to the bare category name regardless of `sub-category`.
+**Module folders at a glance:**
 
-**Per-row flags (CSV columns, value = "yes" to enable):**
-- `highlight` → `ev.highlight`. Currently affects: (a) the in-row single-day event marker — highlighted events render as a gold ★ in their lane, non-highlighted single-day events render as a monochrome sport-icon tick; (b) multi-day bars get a gold border + shimmer (`.bar-highlight`); (c) tournament names in calendar and weekly views get gold styling (`.cal-event-highlight`, `.week-event-highlight`).
-- `toppin` → `ev.topPin`. Pins the tournament to the **top header rail** above the timeline (gold "★ Name" pill with vertical tick to the start date). Works for any `format` — single-day or multi-day. The header rail is exclusively driven by this flag now; it is NOT linked to single-day events.
-**Top revenue sports (separate sheet tab):** Sourced from a `SportCategories` tab in the same Google Sheet — NOT from per-event flags. The tab has two columns:
-- `category` — must match what `effectiveCategory(ev)` returns at runtime (e.g. `Tennis`, `Esports (VALORANT)`).
-- `toprevsport` — `yes`/blank.
+- `core/` — foundation reused everywhere. No DOM ownership, no feature state of its own.
+  - `data.js` — live tournament data + loader (sheets, parsing, `effectiveCategory`).
+  - `timeline-config.js` — layout constants (`DAY_PX`, `BAR_H`, …), timeline bounds, `dayOffset`.
+  - `util.js` — `fmtDate`, `parseLocalDate`, `todayLocalStr`, `getColor` (with fallback palette).
+  - `view-state.js` — `currentView` (live binding) and `setView()` choreography.
+- `features/` — one folder per user-visible feature. Each owns its state, its persistence, and any panel/sidebar UI specific to that feature.
+  - `favourites.js`, `top-revenue.js`, `promotions.js`, `match-panel.js`, `settings-panel.js`, `filters.js`, `cw-filters.js`, `search.js`, `keyboard.js`.
+- `views/` — pure DOM-rendering modules called from the render pipeline.
+  - `timeline-rows.js`, `month-headers.js`, `sidebar.js`, `calendar.js`, `weekly.js`, `tooltip.js`, `scroll.js`.
 
-The tab's published-CSV URL lives in `SHEET_URL_SPORT_CATEGORIES` in `app.js`; its `gid` placeholder (`REPLACE_WITH_YOUR_GID`) must be replaced with the real gid before this lights up. Failure to fetch is non-fatal — the feature simply hides itself.
+**Dependency rules** (enforced by convention, not by tooling):
 
-After `loadData()`, `SPORT_CATEGORIES = [{ category, topRevSport }, …]`. `computeTopRevenueSports()` then builds `topRevenueSports = new Set(category names where topRevSport)`. Surfaces:
-- Gold `$` icon next to the sport name in the timeline sport-mode sidebar, the timeline filter panel sport list, and the cw-sidebar Sport list.
-- In both filter panels, top-revenue sports float to the top under a "Top revenue" header; the rest sit under "Other sports".
-- "Top revenue sports only" toggle (`showOnlyTopRevenue`, persisted to `mjr_top_rev_only`) in the timeline filter panel and the cw-sidebar — filters all three views via `getSortedCatData`, `getSortedCountryData`, and `getFilteredTournaments`.
-- Toggle hides itself entirely if `topRevenueSports.size === 0`.
+- `core/*` can import from other `core/*` and from `lookups.js` globals.
+- `features/*` can import from `core/*` and from other `features/*`.
+- `views/*` can import from `core/*`, `features/*`, and other `views/*`.
+- Nothing imports back into `app.js`. The orchestrator is a one-way sink.
 
-## Promotions
+**Mutable state via ES module live bindings.** Modules that own mutable state (`TOURNAMENTS`, `sortMode`, `currentView`, `showOnlyFavourites`, etc.) export the value as `let` and expose a setter (`setSortModeValue`, `setShowOnlyFavourites`, …) for cross-module writes. Consumers `import { thing }` and reads always see the latest value at access time. There is no runtime "deps-injection" pattern — every dependency is an explicit ES import.
 
-Sport-trading-team feature: manually-created promos (e.g. "EPL refund if your team loses in 90th minute") that traders need to see alongside the tournaments they're attached to. Sourced from a separate `Promotions` tab in the same Google Sheet.
+**Inline HTML handlers.** None. `index.html` has no `onclick`/`oninput` attributes. All event wiring is done at init by `wireDomHandlers()` in `app.js` using `addEventListener`. Adding a new button means: give it an id, then add one line in `wireDomHandlers()`.
+
+## Data flow
+
+1. **`loadData()`** in `core/data.js` fetches four sheet tabs in parallel: Tournaments, Matches, SportCategories, Promotions. Each parsed row is mapped to a plain object; results populate the live bindings `TOURNAMENTS`, `MATCHES` (private), `SPORT_CATEGORIES`, plus `PROMOTIONS` via `buildPromotionsData()` in `features/promotions.js`.
+2. **`computeTimelineBounds(TOURNAMENTS)`** sets `TIMELINE_START`/`END`/`TOTAL_DAYS`/`TOTAL_W` in `core/timeline-config.js`.
+3. **`buildData()`** in `features/filters.js` populates `catData` (one entry per sport, with lane-packed events) and clears the lazy `_countryData` cache.
+4. **`computeTopRevenueSports()`** builds `topRevenueSports` (Set) from flagged `SPORT_CATEGORIES` rows.
+5. **`renderAll()`** in `app.js` then calls every `build*` function in order: header date, month headers, promo rail, sidebar, timeline rows, cw-sidebar, plus the current cw view if applicable.
+
+Both `init()` (first load) and `refreshAll()` (every 15 minutes, see [Auto-refresh](#auto-refresh)) go through `refreshData()` → `renderAll()` so there is one canonical pipeline.
+
+## Data source
+
+Tournament data is fetched at runtime from a published Google Sheets CSV. Four tabs:
+
+| Tab | Constant | Purpose |
+|-----|----------|---------|
+| Tournaments | `SHEET_URL_TOURNAMENTS` | One row per tournament/event/race. Populates `TOURNAMENTS`. |
+| Matches | `SHEET_URL_MATCHES` | One row per individual match (linked to a parent tournament by name). Populates `MATCHES`. |
+| SportCategories | `SHEET_URL_SPORT_CATEGORIES` | One row per sport, with a `toprevsport` yes/no flag. Drives top-revenue surfaces. |
+| Promotions | `SHEET_URL_PROMOTIONS` | One row per promo (name, dates, linked tournaments / sport). Populates `PROMOTIONS`. |
+
+All four URLs live in `core/data.js`. Edit the sheets, not `lookups.js`.
+
+## Data shape
+
+Each Tournaments-tab row produces a `TOURNAMENTS[]` entry. Key `format` values: `tournament`, `season`, `event`, `race`, `onedayevent`, `match`. The `match` format is excluded from `TOURNAMENTS` and tracked separately as a `MATCHES` entry linked to a parent tournament by name.
+
+Rows may carry a `sub-category` field (e.g. Esports games like "VALORANT"); `effectiveCategory(ev)` returns `"Category (sub-category)"` for these — except for categories listed in `NO_SUBCATEGORY_SPLIT` (currently `Yachting`), which always collapse to the bare category name regardless of `sub-category`.
+
+**Per-row flags** (CSV columns on the Tournaments tab, value = `"yes"` to enable):
+
+- `highlight` → `ev.highlight`. Affects: (a) single-day event marker — highlighted events render as a gold ★, non-highlighted as a monochrome sport-icon tick; (b) multi-day bars get a gold border + shimmer (`.bar-highlight`); (c) calendar/weekly event names get gold styling (`.cal-event-highlight`, `.week-event-highlight`).
+- `toppin` → `ev.topPin`. Pins the tournament to the **top header rail** above the timeline (gold "★ Name" pill with vertical tick to start date). Works for any `format`. Header rail is exclusively driven by this flag.
+
+## Features
+
+### Favourites
+
+User-starred tournaments, keyed per-edition by `${name}|${startDate}` so 2026 and 2027 editions are distinct.
+
+- State in `features/favourites.js`: `favourites` (Set), `showOnlyFavourites` (bool). Persisted to `localStorage` as `mjr_favourites` (array) and `mjr_fav_only` (`'0'|'1'`).
+- API: `isFavourite(ev)`, `toggleFavourite(ev)`, `loadFavourites()`, `saveFavourites()`, `saveFavOnly()`, `setShowOnlyFavourites(v)`.
+- Surfaces:
+  - Bar ⭐ button (`.bar-fav-btn`) on multi-day timeline bars when `widthPx >= 58`. Adds `.has-fav` to reserve right padding.
+  - "My favorite events only" toggle in the timeline filter panel and the cw-sidebar's `#cwSpecialFilters` section.
+  - Settings panel section (`features/settings-panel.js`) — alphabetical list with per-row unstar + "Clear all".
+- Filter wiring: `getSortedCatData`, `getSortedCountryData`, `getFilteredTournaments` all honour `showOnlyFavourites`.
+
+### Top revenue sports
+
+Sourced from the `SportCategories` sheet tab. The tab has two columns: `category` (must match `effectiveCategory(ev)` output, e.g. `Tennis`, `Esports`) and `toprevsport` (`yes`/blank).
+
+Failure to fetch is non-fatal — the feature simply hides itself.
+
+After `loadData()`, `SPORT_CATEGORIES = [{ category, topRevSport }, …]` in `core/data.js`. `computeTopRevenueSports()` in `features/top-revenue.js` then builds `topRevenueSports` (Set) by **expanding** each flagged row to every event whose raw `ev.category` OR rendered `effectiveCategory(ev)` matches — so a sheet entry of `Esports` covers `Esports (VALORANT)`, `Esports (CS2)`, etc. without needing a row per game.
+
+Surfaces:
+- Gold `$` icon next to the sport in the timeline sport-mode sidebar, the timeline filter panel sport list, and the cw-sidebar Sport list.
+- In both filter panels, top-revenue sports float to the top under a "Top revenue" header; the rest under "Other sports".
+- "Top revenue sports only" toggle (`showOnlyTopRevenue`, persisted to `mjr_top_rev_only`) in both filter panels. Filters all three views via `getSortedCatData`, `getSortedCountryData`, `getFilteredTournaments`. Toggle hides itself if `topRevenueSports.size === 0`.
+
+### Promotions
+
+Sport-trading-team feature: manually-created promos (e.g. "EPL refund if your team loses in 90th minute"). Owned by `features/promotions.js`. Sourced from the `Promotions` sheet tab.
 
 **Sheet columns** (one row per promo):
-- `name` — promo name (required)
-- `description` — what the promo offers (free text)
-- `startdate`, `enddate` — `YYYY-MM-DD`
+- `name` — promo name (required).
+- `description` — what the promo offers (free text).
+- `startdate`, `enddate` — `YYYY-MM-DD`.
 - `linkedtournaments` — pipe-delimited tournament names matching `TOURNAMENTS[].name` (e.g. `Wimbledon 2026 | US Open 2026`). Optional when `sport` is set.
-- `sport` — applies the promo to every tournament whose raw `category`, `subCategory`, or rendered `effectiveCategory()` matches this string (case-insensitive). Optional when `linkedtournaments` is set. Examples: `UFC`, `Tennis`, `Esports (VALORANT)`. **At least one of `linkedtournaments` or `sport` is required** — promos with neither are filtered out at parse time.
+- `sport` — applies the promo to every tournament whose raw `category`, `subCategory`, or rendered `effectiveCategory()` matches this string (case-insensitive). Optional when `linkedtournaments` is set. **At least one of `linkedtournaments` or `sport` is required** — promos with neither are dropped at parse time.
 
-The tab's published-CSV URL lives in `SHEET_URL_PROMOTIONS` in `app.js`; its `gid` placeholder (`REPLACE_WITH_PROMOTIONS_GID`) must be replaced with the real gid before this lights up. Failure to fetch is non-fatal — the rail and badges simply don't render.
+Failure to fetch is non-fatal — rail and badges simply don't render.
 
-**Parsing:** `loadData()` populates `PROMOTIONS = [{ name, description, startDate, endDate, linkedTournaments, sport }]`. Every row in the sheet is shown — past, present, and future. The only parse-time filter is structural validity (`name && startDate && endDate && (linkedTournaments.length > 0 || sport)`). `PROMOTIONS_BY_TOURNAMENT` is a lowercase-keyed map for O(1) badge lookup per tournament; sport-wide promos are expanded across all matching tournaments at build time (deduped per tournament).
+**Parsing:** `buildPromotionsData()` populates `PROMOTIONS = [{ name, description, startDate, endDate, linkedTournaments, sport }]`. Every row is shown — past, present, and future. The only parse-time filter is structural validity. `PROMOTIONS_BY_TOURNAMENT` is a lowercase-keyed map (private to the module) for O(1) badge lookup; sport-wide promos are expanded across all matching tournaments at build time (deduped per tournament).
 
 **Surfaces:**
-- **Timeline rail** (`#promoRail`, `buildPromoRail()`): horizontal sticky strip below `.months-header` with one pill per promo, positioned `startDate → endDate`. Overlapping promos lane-pack like the toppin rail. Purple gradient pill with gift icon; click navigates to the first linked tournament; hover shows promo tooltip. Past promos render at 45% opacity (`.promo-pill-past`); single-day icon-only pills get `.promo-pill-icon-only` for centered icon.
-- **Timeline bar badge** (`.bar-promo-btn`): small purple gift icon on tournament bars with linked promos. Mirrors `.bar-fav-btn`: only renders when `widthPx >= 58`. Sits at `right: 4px` alone, `right: 22px` when fav star is also present (`.has-fav.has-promo` → `padding-right: 40px`). Hover lists every active promo for that tournament; click is a no-op.
-- **Calendar/Weekly badge** (`.cal-event-promo-badge`, `.week-event-promo-badge`): same gift icon inline in event rows for any tournament with linked promos. Hover-only tooltip (`showBarPromoTooltip`).
+- **Timeline rail** (`#promoRail`, `buildPromoRail()`): sticky strip below `.months-header` with one pill per promo, positioned `startDate → endDate`. Overlapping promos lane-pack like the toppin rail. Past promos render at 45% opacity (`.promo-pill-past`); single-day icon-only pills get `.promo-pill-icon-only`.
+- **Timeline bar badge** (`.bar-promo-btn`): small purple gift icon on tournament bars with linked promos. Only renders when `widthPx >= 58`. `.has-promo` reserves right padding; `.has-fav.has-promo` reserves more so the fav star and gift icon don't collide.
+- **Calendar/Weekly badge** (`.cal-event-promo-badge`, `.week-event-promo-badge`): same gift icon inline in event rows for any tournament with linked promos. Hover shows promo list (`showBarPromoTooltip`).
 - **Sidebar Promotions section** (`#sidebarPromoSection`): clickable label in the timeline sidebar at the same Y as the promo rail. Click opens the promo panel.
-- **Promo panel** (`#promoPanel`): slide-in right panel, Active / Upcoming / Past grouping, each promo as a card with name, description, dates, sport chip (cyan), tournament chips (purple, click-to-navigate). Esc closes (priority: promo panel → settings → match panel → view default).
-- **"Active promotions only" filter toggle**: in both the timeline filter panel (`.filter-option-promo`) and the cw-sidebar (inside `#cwSpecialFilters`, the consolidated "Special filters" section). State is `showOnlyPromos`, persisted to `mjr_promo_only`. Hides itself when `PROMOTIONS.length === 0`. Wires into `getSortedCatData`, `getSortedCountryData`, `getFilteredTournaments`, and both filter-button badge counts. Cleared by `clearFilters()` and `clearCwFilters()`.
+- **Promo panel** (`#promoPanel`): slide-in right panel with Active / Upcoming / Past grouping. Each promo as a card with name, description, dates, sport chip (cyan), and tournament chips (purple, click-to-navigate).
+- **"Active promotions only" filter toggle**: in both filter panels. State is `showOnlyPromos`, persisted to `mjr_promo_only`. Hides itself when `PROMOTIONS.length === 0`. Wires into all three sorted-data getters and both filter-button badge counts.
 - **`hasActivePromo(ev)`**: helper — `true` iff at least one linked promo's `startDate <= today <= endDate`.
-- **`parseLinkedTournaments(str)`** in `data.js` splits on `|`. Explicit choice so tournament names can safely contain commas, ampersands, or slashes.
 
-**Roadmap (deferred):** dedicated "Promotions" view (4th tab), `link`/`featured`/`status` columns, search integration — see memory `project_promotions_feature.md`.
+`parseLinkedTournaments(str)` in `lookups.js` splits on `|`. Explicit choice so tournament names can safely contain commas, ampersands, or slashes.
 
-## Three views
+### Settings panel
 
-| View | Container | Sidebar |
-|------|-----------|---------|
-| Timeline | `#mainView` | `#sidebarRows` — sortable by Sport/Country/A–Z, with sport/country filter panel; filters persisted to `localStorage` per sort mode (`mjr_filters_*`) |
-| Calendar | `#calendarView` inside `#cwLayout` | `#cwLayout > .cw-sidebar` — filters by sport + country (not persisted) |
-| Weekly | `#weeklyView` inside `#cwLayout` | same shared cw-sidebar |
+Right-side slide-in panel in `features/settings-panel.js`. Opened by the gear button in the header. Closed by × button, backdrop click, or Esc.
 
-`setView(view)` switches between them. Calendar and Weekly share `#cwLayout` and `buildCwSidebar()` / `cwFilters`.
+- Markup: `#settingsBackdrop` + `#settingsPanel` in `index.html`. Panel uses fixed positioning with a `transform: translateX(100%)` → `0` transition.
+- Render flow: `openSettingsPanel()` → `renderSettings()` → `renderSettingsFavourites()` + `renderSettingsShortcuts()`. Add more sections by appending to `renderSettings()`.
+- Favourites section: count + alphabetical list of starred tournaments (name + sport + dates + country), each with an unstar button that animates the row out then re-renders. "Clear all favorite events" button at the bottom uses native `confirm()`.
+- After any change, the function calls `updateFilterBtn()`, `updateCwUI()`, `rebuildViews()`, and (if in calendar/weekly view) `rebuildCwView()` so the rest of the UI stays in sync.
 
-## Favourites
+### Search
 
-User-starred tournaments. Per-edition: keyed by `${name}|${startDate}` so the 2026 edition is distinct from 2027.
+`features/search.js`. Header search box. Matches against tournament `name`, `effectiveCategory()` (sport), and `country` via case-insensitive substring.
 
-- State: in-memory `favourites` (Set) and `showOnlyFavourites` (bool). Persisted to `localStorage` under `mjr_favourites` (array) and `mjr_fav_only` (`'0'|'1'`).
-- API: `isFavourite(ev)`, `toggleFavourite(ev)`, `loadFavourites()`, `saveFavourites()`, `saveFavOnly()`.
-- UI surfaces:
-  - **Bar ⭐ button** (`.bar-fav-btn`): rendered on multi-day tournament bars in the timeline when `widthPx >= 58`. Adds `.has-fav` to the bar so right padding reserves space. Single-day `event`/`race` star markers do NOT get a fav button in v1.
-  - **Timeline filter panel**: a "My favourites only" row prepended in `renderFilterOptions()` above the sport/country list. Cleared by `clearFilters()`.
-  - **Calendar/Weekly sidebar**: the "My favorite events only" toggle lives in the consolidated `#cwSpecialFilters` section (the "Special filters" header at the top of `cwSidebarBody`), alongside the top-revenue and active-promos toggles. All injected by `buildCwSidebar()`. Cleared by `clearCwFilters()`.
-- Filter wiring: `getSortedCatData`, `getSortedCountryData`, and `getFilteredTournaments` all honour `showOnlyFavourites`. The badge count on the timeline filter button and the cw-sidebar badge both include the fav toggle.
+- **Action chips**: when the query matches a distinct sport or country, the dropdown prepends a "Filter to …" chip (up to 2 sports, 2 countries). Selecting a chip calls `applySearchFilter(kind, label)` in `features/filters.js`, which switches `sortMode` if needed, overrides `activeFilters` + `cwFilters`, and triggers a rebuild.
+- **Tournament rows** follow (up to 7). On select they call `goToTournament()` which navigates per current view (`navigateToEvent` / `scrollToCalendarEvent` / `scrollToWeekEvent`).
+- Keyboard nav covers chips + tournaments in document order via a unified `combinedItems` array.
 
-## Settings panel
+### Match panel
 
-Right-side slide-in panel for managing user preferences. Opened by the gear button in the header (`.settings-btn`) or the "Manage favourites…" link inside the timeline filter panel. Closed by the × button, clicking the backdrop, or Esc (handled in `initKeyboardShortcuts`).
+`features/match-panel.js`. Slide-in panel in the Weekly view showing all matches for a tournament. Opened by clicking the "Matches loaded ›" link on a weekly row when the tournament has linked matches.
 
-- Markup: `#settingsBackdrop` + `#settingsPanel` live near the end of `index.html` body. Panel uses fixed positioning with a `transform: translateX(100%)` → `0` transition (`.settings-panel.open`).
-- Render flow: `openSettingsPanel()` → `renderSettings()` → currently only `renderSettingsFavourites()`. Add more sections here as new settings are introduced.
-- Favourites section: shows count, alphabetical list of starred tournaments (name + sport + dates + country), each with an unstar button that animates the row out (`.removing` class) then re-renders. "Clear all favourites" button at the bottom uses a native `confirm()`.
-- After any change, the function refreshes the panel itself plus `updateFilterBtn()`, `updateCwUI()`, `rebuildViews()`, and `rebuildCwView()` so the rest of the UI stays in sync.
+- Owns `_activeMatchTournament`. Exposed via `getActiveMatchTournament()` / `resetActiveMatchTournament()` so the Esc handler and the weekly-view rebuild can read/clear it.
+- Closed by the × button or Esc (priority chain: promo panel → settings → match panel → view default).
 
-## Search
+## Views (the three top-level layouts)
 
-`initSearch()` powers the header search box. Matches against tournament `name`, `effectiveCategory()` (sport), and `country` via case-insensitive substring.
+| View | Container | Build fn | Sidebar |
+|------|-----------|----------|---------|
+| Timeline | `#mainView` | `buildSidebar` + `buildTimelineRows` + `buildMonthHeaders` + `buildPromoRail` | `#sidebarRows` — sortable by Sport/Country/A–Z. Filter panel persisted per sort mode (`mjr_filters_*`). |
+| Calendar | `#calendarView` inside `#cwLayout` | `buildCalendarView` | `#cwLayout > .cw-sidebar` — Special filters + Sport + Country (cwFilters not persisted). |
+| Weekly | `#weeklyView` inside `#cwLayout` | `buildWeeklyView` | same shared cw-sidebar. |
 
-- **Action chips**: when the query matches a distinct sport or country, the dropdown prepends a "Filter to …" chip (up to 2 sports, 2 countries). Selecting a chip calls `applySearchFilter(kind, label)` which:
-  - switches `sortMode` if needed (sport chip → `'live'` if currently `'country'`; country chip → `'country'`),
-  - overrides `activeFilters` (timeline) and mirrors into `cwFilters` (calendar/weekly) so the filter is visible regardless of view,
-  - saves, refreshes `updateFilterBtn` / `updateCwUI`, calls `rebuildViews()` + `buildCwSidebar()`, and rebuilds the cw view if it's the current one.
-- **Tournament rows** follow below (up to 7). On select they call `goToTournament()` which navigates per current view (`navigateToEvent` / `scrollToCalendarEvent` / `scrollToWeekEvent`).
-- Keyboard nav covers chips and tournaments in document order via a unified `combinedItems` array (`ArrowUp`/`Down`, `Enter` to activate, `Esc` to close).
+`setView(view)` in `core/view-state.js` toggles which layout is visible and dispatches to the right `build*` function for the cw views. Calendar and Weekly share `#cwLayout` and the cw-sidebar (`features/cw-filters.js`).
 
 ## Key patterns
 
-**Lane assignment** (`assignLanes`, `assignCountryLanes`): greedy left-to-right collision detection that packs overlapping tournament bars into horizontal lanes. Each event gets `_lane` (sport view) or `_cLane` (country view). Row height is derived from lane count.
+**Lane assignment** (`assignLanes`, `assignCountryLanes` in `features/filters.js`): greedy left-to-right collision detection that packs overlapping tournament bars into horizontal lanes. Each event gets `_lane` (sport view) or `_cLane` (country view). Row height is derived from lane count. Same pattern reused for the toppin rail (`views/month-headers.js`) and the promo rail (`features/promotions.js`).
 
-**Timeline coordinate system:** `DAY_PX` pixels per day (9 on mobile, 18 on desktop). `dayOffset(dateStr)` returns days from `TIMELINE_START`. All bar positions are computed as `dayOffset * DAY_PX`.
+**Timeline coordinate system** (`core/timeline-config.js`): `DAY_PX` pixels per day (9 on mobile, 18 on desktop). `dayOffset(date)` returns days from `TIMELINE_START`. All bar positions are computed as `dayOffset * DAY_PX`. `TIMELINE_START`/`END`/`TOTAL_DAYS`/`TOTAL_W` are live bindings — reassigned by `computeTimelineBounds()` on every refresh.
 
-**Date parsing:** Use `parseLocalDate(str)` (not `new Date(str)`) for YYYY-MM-DD strings to avoid UTC/local midnight mismatch when comparing against locally-constructed dates.
+**Date parsing** (`core/util.js`): use `parseLocalDate(str)` (not `new Date(str)`) for YYYY-MM-DD strings to avoid UTC/local midnight mismatch when comparing against locally-constructed dates.
 
-**Live sort mode:** Active tournaments are split into a "live" slice shown at the top; upcoming tournaments sorted by start date follow below. This split happens in `getSortedCatData()` and `getSortedCountryData()`.
+**Live sort mode:** active tournaments are split into a "live" slice shown at the top; upcoming tournaments sorted by start date follow below. This split happens in `getSortedCatData()` and `getSortedCountryData()` in `features/filters.js`.
 
-**Match panel:** In the Weekly view, clicking a tournament with associated `MATCHES` entries opens a slide-in panel (`buildMatchPanel`). Only one match panel is open at a time (`_activeMatchTournament`).
+**Filtered-view trimming:**
+- **Calendar** (`views/calendar.js`): only renders year grids that contain at least one filtered event; falls back to a "No events match the current filters." empty state.
+- **Weekly** (`views/weekly.js`): computes `renderStart`/`renderEnd` from the earliest/latest filtered event's Monday-of-week, but always extends to include the current week so the blue "you are here" marker stays visible.
 
-**Filtered-view trimming:** Both Calendar and Weekly views trim empty leading/trailing periods when filters narrow the result set.
-- **Calendar:** only renders year grids that contain at least one filtered event; falls back to a "No events match the current filters." empty state.
-- **Weekly:** computes `renderStart`/`renderEnd` from the earliest/latest filtered event's Monday-of-week, but always extends to include the current week so the "you are here" blue marker stays visible. Years entirely outside the window are skipped (year header is only added on the first rendered week of a year via `yearHeaderAdded`).
+**Forward-only navigation:** `navigateToEvent(ev, { forwardOnly: true })` in `views/scroll.js` never scrolls horizontally backward — used by promo-rail pill clicks so past events don't yank the user into history. `{ horizontalOnly: true }` skips the vertical row-snap (used by sidebar status-pill clicks). Both are opt-in via the options object.
+
+## Auto-refresh
+
+For unattended displays (e.g. meeting-room screens) where the page is never reloaded. Every 15 minutes (`REFRESH_MS` in `app.js`) `refreshAll()` runs the same pipeline as `init()`:
+
+1. Capture scroll positions of the timeline, calendar, weekly, sidebar containers.
+2. `refreshData()` — re-fetch all four sheet tabs + rebuild `catData` + `topRevenueSports`.
+3. `renderAll()` — re-render every view.
+4. Restore scroll positions on the next animation frame.
+
+If the user is on Calendar or Weekly, the current view is also rebuilt at the end of `renderAll()`.
 
 ## Cache-busting and version badge
 
-Cache-busting is automatic — no manual `?v=N` bumping. `index.html` contains a small inline boot script that:
+Cache-busting is automatic — no manual `?v=N` bumping. `index.html` contains an inline boot script that:
 
 - Sets `style.css?v=${Date.now()}` so CSS is always fresh on reload.
-- For `data.js` and `app.js`: issues a HEAD request, reads the `Last-Modified` header, and loads each script with `?v=<mtime-epoch-ms>`. Scripts are awaited sequentially so `data.js` loads before `app.js`.
-- Computes the newest mtime across all three files and writes it into the `#versionBadge` element (bottom-right pill) as `v YYYY.MM.DD HH:MM`. The badge ticks up only when source files actually change, making it easy to confirm a refresh picked up your edit.
+- For `lookups.js` and `app.js`: HEAD requests each file, reads `Last-Modified`, and loads each script with `?v=<mtime-epoch-ms>`. Loaded sequentially so `lookups.js` runs first (it defines globals the modules read).
+- Computes the newest mtime across all three files and writes it into `#versionBadge` (bottom-right pill) as `v YYYY.MM.DD HH:MM`. The badge ticks up only when a source file actually changes, so a hard refresh proves your edit landed.
 
 The version badge is positioned via `.version-badge` in `style.css`.
 
@@ -143,4 +218,7 @@ The version badge is positioned via `.version-badge` in `style.css`.
 | `T` | Go to today |
 | `S` | Focus search |
 | `V` | Cycle view: Timeline → Calendar → Weekly |
-| `Esc` | Close open panel; otherwise scroll to start (timeline) or go to today (calendar/weekly) |
+| `+` / `−` (in input) | (no global shortcuts beyond the above) |
+| `Esc` | Close open panel (priority: promo → settings → match → default); timeline scrolls to start, calendar/weekly go to today |
+
+All implemented in `features/keyboard.js`. Add a new shortcut here AND in `renderSettingsShortcuts()` in `features/settings-panel.js` so the help reflects it.

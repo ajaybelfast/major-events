@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sports Calendar</title>
-  <link rel="icon" type="image/webp" href="favicon-32x32.webp" sizes="32x32">
+  <link rel="icon" type="image/webp" href="assets/favicon-32x32.webp" sizes="32x32">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" id="appStyle">
   <script>
@@ -22,7 +22,7 @@
 
 <div class="page-header">
   <div class="header-logo-wrap">
-    <img src="Stake_logo.svg" class="header-logo" alt="Stake" onclick="scrollToStart()" style="cursor:pointer" title="Scroll to start (Esc)">
+    <img src="assets/Stake_logo.svg" class="header-logo" alt="Stake" style="cursor:pointer" title="Scroll to start (Esc)">
   </div>
   <div class="header-title">
     <h1>Sports Calendar</h1>
@@ -30,13 +30,13 @@
   </div>
   <div class="header-right">
     <div class="view-toggle">
-      <button class="view-btn on" id="btnTimeline" onclick="setView('timeline')" title="Timeline view (V to cycle)">
+      <button class="view-btn on" id="btnTimeline" title="Timeline view (V to cycle)">
         <i class="fa-solid fa-table-list"></i><span class="view-btn-label">Timeline</span>
       </button>
-      <button class="view-btn" id="btnCalendar" onclick="setView('calendar')" title="Calendar view (V to cycle)">
+      <button class="view-btn" id="btnCalendar" title="Calendar view (V to cycle)">
         <i class="fa-solid fa-calendar-days"></i><span class="view-btn-label">Calendar</span>
       </button>
-      <button class="view-btn" id="btnWeekly" onclick="setView('weekly')" title="Weekly view (V to cycle)">
+      <button class="view-btn" id="btnWeekly" title="Weekly view (V to cycle)">
         <i class="fa-solid fa-list-ul"></i><span class="view-btn-label">Weekly</span>
       </button>
     </div>
@@ -45,27 +45,27 @@
       <input type="text" id="searchInput" class="search-input" placeholder="Search tournament (S)…" autocomplete="off" title="Search (S)">
       <div class="search-results" id="searchResults"></div>
     </div>
-    <button class="today-btn" onclick="goToToday()" title="Go to today (T)">&#9654; Today</button>
-    <button class="settings-btn" onclick="openSettingsPanel()" title="Settings"><i class="fa-solid fa-gear"></i></button>
+    <button class="today-btn" title="Go to today (T)">&#9654; Today</button>
+    <button class="settings-btn" title="Settings"><i class="fa-solid fa-gear"></i></button>
   </div>
 </div>
 
 <div class="main" id="mainView">
-  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar()"></div>
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
   <div class="sidebar">
     <div class="sidebar-header">
       <div class="sidebar-header-top">
         <span id="sidebarLabel">Sport</span>
         <div class="sidebar-header-actions">
-          <button class="filter-clear-icon-btn" id="filterClearIconBtn" onclick="clearFilters()" title="Clear filters"><i class="fa-solid fa-xmark"></i></button>
-          <button class="filter-btn" id="filterBtn" onclick="toggleFilterPanel()" title="Filter by sport"><i class="fa-solid fa-sliders"></i></button>
-          <button class="hamburger-btn" id="hamburgerBtn" onclick="toggleSidebar()" title="Collapse sidebar"><i class="fa-solid fa-bars"></i></button>
+          <button class="filter-clear-icon-btn" id="filterClearIconBtn" title="Clear filters"><i class="fa-solid fa-xmark"></i></button>
+          <button class="filter-btn" id="filterBtn" title="Filter by sport"><i class="fa-solid fa-sliders"></i></button>
+          <button class="hamburger-btn" id="hamburgerBtn" title="Collapse sidebar"><i class="fa-solid fa-bars"></i></button>
         </div>
       </div>
       <div class="sort-btns">
-        <button class="sort-btn"    id="btnAlpha"   onclick="setSort('alpha')">A–Z</button>
-        <button class="sort-btn on" id="btnLive"    onclick="setSort('live')"><i class="fa-solid fa-bolt"></i> Live</button>
-        <button class="sort-btn"    id="btnCountry" onclick="setSort('country')"><i class="fa-solid fa-globe"></i> Country</button>
+        <button class="sort-btn"    id="btnAlpha">A–Z</button>
+        <button class="sort-btn on" id="btnLive"><i class="fa-solid fa-bolt"></i> Live</button>
+        <button class="sort-btn"    id="btnCountry"><i class="fa-solid fa-globe"></i> Country</button>
       </div>
     </div>
     <div class="sidebar-promo-section" id="sidebarPromoSection"></div>
@@ -74,7 +74,7 @@
   <div class="filter-panel" id="filterPanel">
     <div class="filter-panel-list" id="filterOptions"></div>
     <div class="filter-footer">
-      <button class="filter-clear-btn" onclick="clearFilters()">Clear all</button>
+      <button class="filter-clear-btn">Clear all</button>
     </div>
   </div>
   <div class="timeline-wrapper" id="timelineWrapper">
@@ -94,8 +94,8 @@
     </div>
     <div class="cw-search-wrap">
       <i class="fa-solid fa-magnifying-glass cw-search-icon"></i>
-      <input type="text" id="cwSearchInput" class="cw-search-input" placeholder="Search…" autocomplete="off" oninput="filterCwSidebar(this.value)">
-      <button type="button" class="cw-search-clear" id="cwSearchClear" onclick="clearCwSearch()" title="Clear search"><i class="fa-solid fa-xmark"></i></button>
+      <input type="text" id="cwSearchInput" class="cw-search-input" placeholder="Search…" autocomplete="off">
+      <button type="button" class="cw-search-clear" id="cwSearchClear" title="Clear search"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <div class="cw-sidebar-body" id="cwSidebarBody">
       <div class="cw-section" id="cwSportSection">
@@ -108,7 +108,7 @@
       </div>
     </div>
     <div class="cw-sidebar-footer">
-      <button class="cw-clear-btn" id="cwClearBtn" onclick="clearCwFilters()" disabled>Clear filters</button>
+      <button class="cw-clear-btn" id="cwClearBtn" disabled>Clear filters</button>
     </div>
   </div>
   <div class="cw-main">
@@ -119,20 +119,20 @@
 
 <div class="tooltip" id="tooltip"></div>
 
-<div class="settings-backdrop" id="settingsBackdrop" onclick="closeSettingsPanel()"></div>
+<div class="settings-backdrop" id="settingsBackdrop"></div>
 <aside class="settings-panel" id="settingsPanel" aria-hidden="true">
   <div class="settings-header">
     <span class="settings-title"><i class="fa-solid fa-gear"></i> Settings</span>
-    <button class="settings-close" onclick="closeSettingsPanel()" title="Close">&times;</button>
+    <button class="settings-close" title="Close">&times;</button>
   </div>
   <div class="settings-content" id="settingsContent"></div>
 </aside>
 
-<div class="promo-panel-backdrop" id="promoPanelBackdrop" onclick="closePromoPanel()"></div>
+<div class="promo-panel-backdrop" id="promoPanelBackdrop"></div>
 <aside class="promo-panel" id="promoPanel" aria-hidden="true">
   <div class="promo-panel-header">
     <span class="promo-panel-title"><i class="fa-solid fa-gift"></i> Promotions</span>
-    <button class="promo-panel-close" onclick="closePromoPanel()" title="Close">&times;</button>
+    <button class="promo-panel-close" title="Close">&times;</button>
   </div>
   <div class="promo-panel-content" id="promoPanelContent"></div>
 </aside>
@@ -141,7 +141,14 @@
 
 <script>
 (async function loadAppScripts() {
-  const files = ['data.js', 'app.js'];
+  // lookups.js is a plain global script (defines SPORT_COLORS, SPORT_ICONS,
+  // getFlag, FLAGS, parseCountries, parseLinkedTournaments on window so
+  // they're visible to module code too).
+  // app.js is an ES module (entry point for the feature/* modules).
+  const files = [
+    { src: 'lookups.js', module: false },
+    { src: 'app.js',     module: true  },
+  ];
   const versions = {};
 
   async function mtime(url) {
@@ -154,22 +161,24 @@
     }
   }
 
-  function loadScript(src) {
+  function loadScript(src, isModule) {
     return new Promise((resolve, reject) => {
       const s = document.createElement('script');
       s.src = src;
-      s.async = false;
+      if (isModule) s.type = 'module';
+      else s.async = false; // preserve order for classic scripts
       s.onload = resolve;
       s.onerror = reject;
       document.body.appendChild(s);
     });
   }
 
-  // data.js must load before app.js — sequential await guarantees order.
+  // lookups.js loads as a classic script (and thus runs before any module sees
+  // SPORT_COLORS / SPORT_ICONS / getFlag, since modules implicitly defer).
   for (const f of files) {
-    const ts = await mtime(f);
-    versions[f] = ts;
-    await loadScript(f + '?v=' + ts);
+    const ts = await mtime(f.src);
+    versions[f.src] = ts;
+    await loadScript(f.src + '?v=' + ts, f.module);
   }
 
   // Include CSS mtime in the displayed version (CSS itself uses Date.now for cache-bust).
