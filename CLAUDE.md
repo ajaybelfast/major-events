@@ -35,7 +35,18 @@ The codebase is split into three module folders plus a thin orchestrator at the 
 └── views/              ← DOM-rendering modules
 ```
 
-**CSS organisation.** Five files loaded as separate `<link>` tags in `index.html` (HTTP/2 parallelises them). Each is a consecutive slice of the original `style.css`, so the cascade order matches what the app had before the split. **Design tokens** (`--bg`, `--text`, `--accent-gold`, `--t-fast`, `--r-md`, …) live at the top of `base.css` under `:root` — use them in new styles rather than re-hardcoding hex values or spacing constants.
+**CSS organisation.** Five files loaded as separate `<link>` tags in `index.html` (HTTP/2 parallelises them). Each is a consecutive slice of the original `style.css`, so the cascade order matches what the app had before the split.
+
+**Design tokens.** `styles/base.css` opens with a `:root` block defining the full design system:
+
+- **Solid colours** — `--bg`, `--bg-panel`, `--bg-deeper`, `--bg-hover`, `--bg-active`, `--bg-bar`, `--bg-bar-dim`, `--border`, `--text`, `--text-mid`, `--text-muted`, `--text-dim`, `--text-faint`, `--accent-blue`, `--accent-blue-deep`, `--accent-gold`, `--accent-red`, `--accent-purple`, `--accent-green`, `--accent-green-live`.
+- **RGB triplets** for `rgba()` opacity variants — `--accent-gold-rgb`, `--accent-purple-rgb`, `--accent-red-rgb`, `--text-muted-rgb`. Use as `rgba(var(--accent-gold-rgb), 0.5)` when you need the same colour at varying opacities (e.g. ring glow vs. background tint).
+- **Timings** — `--t-fast` (0.12s) and `--t-medium` (0.2s).
+- **Radii** — `--r-sm` (4px), `--r-md` (6px), `--r-lg` (8px), `--r-pill` (10px).
+
+**Use tokens, not hex.** ~420 substitutions across the 5 files mean every design-system colour and the two common transition timings already go through tokens. New styles must use tokens too — if you're tempted to write a raw hex value, check whether a token covers it first; if not, add a new token rather than scattering literals. The exception is **pure white** (`#fff`) and **rare feature-specific tints** (e.g. the few promo-card light purples) which stay as literals.
+
+**Try it live:** in dev tools, run `document.documentElement.style.setProperty('--accent-gold', '#00ffff')` — every gold UI element in the app flips cyan instantly. That's the proof the design system is doing real work.
 
 **Module folders at a glance:**
 
@@ -212,11 +223,11 @@ If the user is on Calendar or Weekly, the current view is also rebuilt at the en
 
 Cache-busting is automatic — no manual `?v=N` bumping. `index.html` contains an inline boot script that:
 
-- Sets `style.css?v=${Date.now()}` so CSS is always fresh on reload.
+- For each `styles/*.css`: appends `?v=${Date.now()}` so CSS is always fresh on reload.
 - For `lookups.js` and `app.js`: HEAD requests each file, reads `Last-Modified`, and loads each script with `?v=<mtime-epoch-ms>`. Loaded sequentially so `lookups.js` runs first (it defines globals the modules read).
-- Computes the newest mtime across all three files and writes it into `#versionBadge` (bottom-right pill) as `v YYYY.MM.DD HH:MM`. The badge ticks up only when a source file actually changes, so a hard refresh proves your edit landed.
+- Computes the newest mtime across `lookups.js`, `app.js`, and all five `styles/*.css` files, then writes it into `#versionBadge` (bottom-right pill) as `v YYYY.MM.DD HH:MM`. The badge ticks up only when a source file actually changes, so a hard refresh proves your edit landed.
 
-The version badge is positioned via `.version-badge` in `style.css`.
+The version badge is positioned via `.version-badge` in `styles/overlays.css`.
 
 ## Keyboard shortcuts
 
