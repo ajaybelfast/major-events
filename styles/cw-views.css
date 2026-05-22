@@ -1,0 +1,754 @@
+/* ============================================================
+   CW-VIEWS — calendar, weekly, match panel, cw-sidebar shared
+   ============================================================ */
+
+/* ── Calendar View ───────────────────────────────────────── */
+.calendar-view {
+  display: none;
+  flex: 1;
+  overflow-y: auto;
+  background: var(--bg);
+  padding: 28px 32px 40px;
+}
+
+.cal-year-label {
+  font-size: 30px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.4px;
+  padding-bottom: 14px;
+  background: var(--bg);
+  position: sticky;
+  top: 0;
+  z-index: 6;
+}
+
+.cal-empty {
+  padding: 60px 20px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 14px;
+  font-style: italic;
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 40px;
+}
+
+.cal-month-cell {
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  min-height: 140px;
+}
+
+.cal-month-header {
+  padding: 9px 12px 8px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1.4px;
+  color: var(--text-dim);
+  background: var(--bg-panel);
+  border-bottom: 2px solid var(--bg-hover);
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+
+.cal-month-current .cal-month-header {
+  color: var(--accent-blue);
+  border-bottom-color: var(--accent-blue-deep);
+  background: var(--bg-active);
+}
+
+.cal-month-past {
+  background: var(--bg-bar-dim);
+}
+
+.cal-month-past .cal-month-header {
+  color: var(--text-muted);
+  background: var(--bg-bar);
+  border-bottom-color: var(--border);
+}
+
+.cal-event-list {
+  flex: 1;
+  padding: 8px 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cal-event-item {
+  display: grid;
+  grid-template-columns: 14px 16px 1fr 14px;
+  align-items: start;
+  column-gap: 6px;
+  padding: 3px 5px;
+  padding-right: 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.1s;
+  position: relative;
+}
+
+.cal-event-item:hover { background: var(--bg-hover); }
+
+.cal-event-item > i {
+  font-size: 12px;
+  margin-top: 2px;
+  justify-self: center;
+}
+
+.cal-event-name {
+  font-size: 12px;
+  color: var(--text-mid);
+  line-height: 1.35;
+}
+
+.cal-event-highlight .cal-event-name {
+  color: var(--accent-gold);
+}
+
+/* Rows in past months are dimmed so finished months read as completed */
+.cal-month-past .cal-event-item { opacity: 0.6; }
+.cal-month-past .cal-event-name { color: var(--text-muted); }
+/* Per-event past styling — applies even inside the current month so already-
+   ended tournaments don't compete for attention with active ones. */
+.cal-event-item.cal-event-past { opacity: 0.6; }
+.cal-event-item.cal-event-past .cal-event-name { color: var(--text-muted); }
+
+.cal-event-live::after {
+  content: '';
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-green-live);
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}
+
+/* ── Weekly View ─────────────────────────────────────────── */
+.weekly-view {
+  display: none;
+  flex: 1;
+  overflow: hidden;
+  flex-direction: row;
+  background: var(--bg);
+}
+
+.weekly-main-panel {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--bg);
+  min-width: 0;
+}
+
+.weekly-year-label {
+  padding: 14px 24px 6px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  background: var(--bg);
+  border-bottom: 1px solid var(--bg-hover);
+  position: sticky;
+  top: 0;
+  z-index: 6;
+}
+
+.week-section {
+  border-bottom: 1px solid var(--bg-deeper);
+}
+
+.week-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 24px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--bg-hover);
+  position: sticky;
+  top: 37px; /* sits below the sticky .weekly-year-label (14+16+6+1px) */
+  z-index: 5;
+}
+
+.week-num-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.week-date-range {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.week-section.week-current .week-header {
+  background: var(--bg-active);
+  border-left: 3px solid var(--accent-blue-deep);
+}
+
+.week-section.week-current .week-num-label {
+  color: var(--accent-blue);
+}
+
+.week-section.week-current .week-date-range {
+  color: var(--accent-blue-deep);
+}
+
+.week-section.week-past {
+  background: var(--bg-bar-dim);
+}
+
+.week-section.week-past .week-header {
+  background: var(--bg-bar);
+}
+
+.week-event-list {
+  padding: 2px 0 5px;
+}
+
+.week-event-item {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 280px) 32px 84px 84px 72px 140px 14px 14px;
+  align-items: center;
+  column-gap: 14px;
+  padding: 5px 24px 5px 28px;
+  border-left: 3px solid transparent;
+  transition: background 0.1s;
+}
+
+/* tighten only the icon→name gap so the start-marker sits evenly between them */
+.week-event-item > i:first-child + .week-event-name { margin-left: -8px; }
+
+.week-event-item:hover { background: var(--bg-panel); }
+
+.week-event-item i {
+  font-size: 13px;
+  width: 14px;
+  text-align: center;
+}
+
+.week-event-name {
+  font-size: 13px;
+  color: var(--text-mid);
+  min-width: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+
+.week-event-name-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.week-event-name-line {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.week-event-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* Sub-category stays muted even when the parent row is highlighted gold. */
+.week-event-highlight .week-event-sub { color: var(--text-dim); }
+
+/* Rows in past weeks are dimmed so finished weeks read as completed */
+.week-section.week-past .week-event-item { opacity: 0.6; }
+.week-section.week-past .week-event-name { color: var(--text-muted); }
+/* Per-event past styling — applies even inside the current week so already-
+   ended tournaments don't compete for attention with active ones. */
+.week-event-item.week-event-past { opacity: 0.6; }
+.week-event-item.week-event-past .week-event-name { color: var(--text-muted); }
+
+.week-event-highlight .week-event-name { color: var(--accent-gold); }
+
+/* Marker shown on the row where a multi-week/multi-month event first starts */
+.start-marker-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  vertical-align: -1px;
+  line-height: 1;
+}
+
+.start-marker {
+  font-size: 11px;
+  color: var(--accent-blue);
+}
+
+.end-marker {
+  font-size: 11px;
+  color: #f85149;
+}
+
+.cal-event-item .start-marker-slot {
+  margin-top: 2px;
+  justify-self: center;
+}
+
+.week-event-name .start-marker-slot {
+  justify-content: flex-start;
+  margin-right: 6px;
+}
+
+.week-event-flag {
+  font-size: 21px;
+  line-height: 1;
+}
+
+.week-event-date {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.week-event-duration {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.match-panel-link {
+  font-size: 12px;
+  color: var(--accent-blue);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.match-panel-link:hover { text-decoration: underline; }
+
+.week-event-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-green-live);
+  justify-self: center;
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}
+
+@keyframes week-flash {
+  0%   { background: transparent; }
+  50%  { background: rgba(88, 166, 255, 0.22); }
+  100% { background: transparent; }
+}
+
+.week-event-flash { animation: week-flash 0.65s ease 4; }
+
+.cal-event-flash { animation: week-flash 0.65s ease 4; }
+
+/* ── Match Panel ─────────────────────────────────────────── */
+.weekly-match-panel {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid var(--border);
+  background: var(--bg);
+  min-width: 0;
+}
+
+.weekly-match-panel.open { display: flex; }
+
+.match-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 20px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.match-panel-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  min-width: 0;
+  flex: 1;
+}
+
+.match-panel-header-flag {
+  font-size: 23px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.match-panel-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.match-panel-meta {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.match-panel-close {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 21px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  flex-shrink: 0;
+  transition: color 0.1s;
+}
+
+.match-panel-close:hover { color: var(--text); }
+
+.match-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-faint) transparent;
+}
+
+.match-panel-content::-webkit-scrollbar { width: 4px; }
+.match-panel-content::-webkit-scrollbar-track { background: transparent; }
+.match-panel-content::-webkit-scrollbar-thumb { background: var(--text-faint); border-radius: 2px; }
+
+.match-week-section { border-bottom: 1px solid var(--bg-deeper); }
+
+.match-week-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 20px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--bg-hover);
+  border-left: 3px solid transparent;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+.match-week-num {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.match-week-dates {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.match-week-section.match-week-current .match-week-header {
+  background: var(--bg-active);
+  border-left-color: var(--accent-blue-deep);
+}
+
+.match-week-section.match-week-current .match-week-num  { color: var(--accent-blue); }
+.match-week-section.match-week-current .match-week-dates { color: var(--accent-blue-deep); }
+
+.match-week-section.match-week-past .match-week-header {
+  background: var(--bg);
+  border-left-color: transparent;
+}
+
+.match-week-section.match-week-past .match-week-num   { color: var(--border); }
+.match-week-section.match-week-past .match-week-dates { color: var(--border); }
+.match-week-section.match-week-past .match-item-name  { color: var(--text-faint); }
+.match-week-section.match-week-past .match-item-date  { color: var(--border); }
+.match-week-section.match-week-past .match-item { border-bottom-color: #1c2229; }
+
+/* Individual past match (date < today) within the current week */
+.match-item.match-item-past .match-item-name { color: var(--text-faint); }
+.match-item.match-item-past .match-item-date { color: var(--border); }
+
+.match-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 20px;
+  border-bottom: 1px solid var(--bg-hover);
+  border-left: 3px solid transparent;
+}
+
+.match-item:last-child { border-bottom: none; }
+
+.match-item.match-item-today {
+  background: rgba(63, 185, 80, 0.10);
+  border-left-color: var(--accent-green-live);
+  padding-left: 17px; /* preserve text x-position alongside the 3px coloured border */
+}
+
+.match-item-date.match-item-today-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--accent-green-live);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  min-width: 0;
+}
+
+.match-item-name {
+  font-size: 13px;
+  color: var(--text-mid);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.match-item-date {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  flex-shrink: 0;
+  white-space: nowrap;
+  min-width: 42px;
+}
+
+.match-panel-empty {
+  padding: 24px 20px;
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+/* Chevron indicator on tournament items that have linked matches */
+.week-event-item.match-active {
+  background: var(--bg-active) !important;
+  border-left-color: var(--accent-blue-deep);
+}
+
+/* ── Calendar / Weekly shared layout ────────────────────── */
+.cw-layout {
+  display: none;
+  flex: 1;
+  overflow: hidden;
+}
+
+.cw-sidebar {
+  width: 210px;
+  flex-shrink: 0;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.cw-sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px 10px;
+  flex-shrink: 0;
+}
+
+.cw-sidebar-title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-dim);
+}
+
+.cw-active-badge {
+  background: var(--accent-blue-deep);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 0 6px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.cw-search-wrap {
+  position: relative;
+  padding: 0 10px 10px;
+  flex-shrink: 0;
+}
+
+.cw-search-icon {
+  position: absolute;
+  left: 18px;
+  /* Wrap has 10px bottom-padding, so true input centre = 50% - 5px. */
+  top: calc(50% - 5px);
+  transform: translateY(-50%);
+  color: var(--text-faint);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.cw-search-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  padding: 5px 26px 5px 26px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.cw-search-input:focus { border-color: var(--accent-blue-deep); }
+.cw-search-input::placeholder { color: var(--text-faint); }
+
+.cw-search-clear {
+  position: absolute;
+  right: 14px;
+  top: calc(50% - 5px);
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0;
+  width: 18px;
+  height: 18px;
+  font-size: 10px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  transition: color var(--t-fast), background var(--t-fast);
+}
+.cw-search-clear:hover { color: var(--text); background: var(--bg-hover); }
+/* Show the clear button only when the input has a value (placeholder not shown). */
+.cw-search-input:not(:placeholder-shown) ~ .cw-search-clear { display: inline-flex; }
+
+.cw-sidebar-body {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 8px;
+}
+
+.cw-section { margin-bottom: 4px; }
+
+.cw-section-title {
+  padding: 8px 16px 3px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-faint);
+}
+
+.cw-filter-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-muted);
+  border-left: 3px solid transparent;
+  transition: background 0.1s, color 0.1s;
+}
+
+.cw-filter-item:hover { background: var(--bg-deeper); color: var(--text-mid); }
+
+.cw-filter-item.cw-active {
+  color: var(--text);
+  background: var(--bg-deeper);
+  border-left-color: var(--accent-blue-deep);
+}
+
+.cw-filter-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cw-sidebar-footer {
+  flex-shrink: 0;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.cw-clear-btn {
+  width: 100%;
+  padding: 7px 12px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+
+.cw-clear-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+
+.cw-clear-btn:disabled { opacity: 0.35; cursor: default; }
+
+.cw-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* Scrollbar ── thicker and easier to grab ─────────────── */
+.timeline-wrapper::-webkit-scrollbar { width: 8px; height: 10px; }
+.timeline-wrapper::-webkit-scrollbar-track { background: var(--bg-panel); }
+.timeline-wrapper::-webkit-scrollbar-thumb { background: var(--text-faint); border-radius: 5px; border: 2px solid var(--bg-panel); }
+.timeline-wrapper::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+.timeline-wrapper::-webkit-scrollbar-corner { background: var(--bg-panel); }
+

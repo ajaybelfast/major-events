@@ -1,0 +1,286 @@
+:root {
+  /* ── Design tokens ──────────────────────────────────────── */
+  /* Use these everywhere — don't reach for hex values when a token exists.
+     If you need a new colour, add a token here first. RGB-triplet companions
+     (--*-rgb) exist for colours used at multiple rgba() opacities. */
+
+  /* Backgrounds */
+  --bg:               #0d1117;  /* page background */
+  --bg-panel:         #161b22;  /* sidebars, headers, panel backgrounds */
+  --bg-deeper:        #1c2128;  /* search dropdown, tooltip, deeper surfaces */
+  --bg-hover:         #21262d;  /* hover state for rows / buttons; also used as soft border */
+  --bg-active:        #1a2332;  /* match-active row, current-week highlight */
+  --bg-bar:           #2d333b;  /* tournament bar gradient (light stop) */
+  --bg-bar-dim:       #262b32;  /* past tournament bar */
+  /* Borders */
+  --border:           #30363d;  /* default border */
+  /* Text */
+  --text:             #e6edf3;  /* primary text */
+  --text-mid:         #c9d1d9;  /* secondary text */
+  --text-muted:       #8b949e;  /* tertiary, status, meta */
+  --text-dim:         #6e7681;  /* hint, placeholder */
+  --text-faint:       #484f58;  /* search icon, low-emphasis */
+  /* Accents (solid) */
+  --accent-blue:      #58a6ff;  /* primary action / link */
+  --accent-blue-deep: #388bfd;  /* active border / focus ring */
+  --accent-gold:      #F7C948;  /* highlight, top-revenue, favourites star */
+  --accent-red:       #f78166;  /* today, destructive hover */
+  --accent-purple:    #c084fc;  /* promotions */
+  --accent-green:     #7ee787;  /* keyboard help icon */
+  --accent-green-live:#3fb950;  /* "live now" indicator */
+  /* Accents (RGB triplets — for rgba() at varying opacities) */
+  --accent-gold-rgb:   247, 201, 72;
+  --accent-purple-rgb: 192, 132, 252;
+  --accent-red-rgb:    247, 129, 102;
+  --text-muted-rgb:    139, 148, 158;
+  /* Timings */
+  --t-fast:           0.12s;  /* hover / state transitions */
+  --t-medium:         0.2s;   /* panel slide, opacity fades */
+  /* Radii */
+  --r-sm:             4px;
+  --r-md:             6px;
+  --r-lg:             8px;
+  --r-pill:           10px;
+}
+
+/* ============================================================
+   BASE — reset, page-header, search, two-panel layout
+   ============================================================ */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Twemoji Country Flags', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Page Header ─────────────────────────────────────────── */
+.page-header {
+  background: linear-gradient(135deg, var(--bg-panel) 0%, var(--bg-deeper) 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 16px 24px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.header-logo-wrap {
+  width: 207px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.header-logo {
+  height: 32px;
+  width: auto;
+  filter: brightness(0) invert(1);
+  opacity: 0.9;
+}
+
+.page-header h1 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  background: linear-gradient(135deg, #fff 0%, var(--text-muted) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.page-header p {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+.header-today-date {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.3px;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* ── Search ──────────────────────────────────────────────── */
+.search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 9px;
+  font-size: 13px;
+  color: var(--text-dim);
+  pointer-events: none;
+}
+
+.search-input {
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  padding: 6px 10px 6px 28px;
+  width: 220px;
+  outline: none;
+  transition: border-color 0.15s, width var(--t-medium);
+}
+
+.search-input::placeholder { color: var(--text-faint); }
+
+.search-input:focus {
+  border-color: var(--accent-blue);
+  width: 270px;
+}
+
+.search-results {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: var(--bg-deeper);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.7);
+  z-index: 500;
+  overflow: hidden;
+  display: none;
+}
+
+.search-results.open { display: block; }
+
+.search-result-item {
+  display: flex;
+  flex-direction: column;
+  padding: 9px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--bg-hover);
+  transition: background 0.1s;
+}
+
+.search-result-item:last-child { border-bottom: none; }
+
+.search-result-item:hover,
+.search-result-selected { background: var(--bg-hover); }
+
+.sr-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.sr-meta {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.search-no-results {
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.search-section-title {
+  padding: 6px 12px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--bg-hover);
+}
+
+.search-action-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--bg-hover);
+  font-size: 13px;
+  color: var(--text-mid);
+  transition: background 0.1s;
+}
+.search-action-chip:hover,
+.search-action-chip.search-result-selected { background: var(--bg-hover); }
+
+.sr-chip-arrow {
+  color: var(--accent-blue);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.sr-chip-icon {
+  font-size: 13px;
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.sr-chip-flag {
+  font-size: 15px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.sr-chip-text {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sr-chip-text strong { color: var(--text); font-weight: 600; }
+.sr-chip-kind {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.today-btn {
+  background: none;
+  border: 1px solid var(--accent-red);
+  border-radius: 5px;
+  color: var(--accent-red);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 5px 11px;
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing: 0.4px;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+
+.today-btn:hover {
+  background: var(--accent-red);
+  color: var(--bg);
+}
+
+/* ── Two-panel layout ────────────────────────────────────── */
+.main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+

@@ -6,10 +6,18 @@
   <title>Sports Calendar</title>
   <link rel="icon" type="image/webp" href="assets/favicon-32x32.webp" sizes="32x32">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" id="appStyle">
+  <!-- App stylesheets are split by feature. Load order matches the original
+       cascade order so specificity works as before. Hrefs filled in by the
+       inline boot script below with a cache-bust querystring. -->
+  <link rel="stylesheet" class="app-style" data-href="styles/base.css">
+  <link rel="stylesheet" class="app-style" data-href="styles/sidebar.css">
+  <link rel="stylesheet" class="app-style" data-href="styles/timeline.css">
+  <link rel="stylesheet" class="app-style" data-href="styles/cw-views.css">
+  <link rel="stylesheet" class="app-style" data-href="styles/overlays.css">
   <script>
     // Always refetch CSS — cheap on localhost, prevents stale styles after edits.
-    document.getElementById('appStyle').href = 'style.css?v=' + Date.now();
+    const v = '?v=' + Date.now();
+    document.querySelectorAll('link.app-style').forEach(el => { el.href = el.dataset.href + v; });
   </script>
   <script type="module">
     // Windows has no native flag emoji glyphs; this polyfill lazy-loads a tiny
@@ -181,8 +189,12 @@
     await loadScript(f.src + '?v=' + ts, f.module);
   }
 
-  // Include CSS mtime in the displayed version (CSS itself uses Date.now for cache-bust).
-  versions['style.css'] = await mtime('style.css');
+  // Include the newest CSS mtime in the displayed version. CSS files
+  // themselves use Date.now() for cache-bust above, so this is purely
+  // for the badge timestamp.
+  const cssFiles = ['styles/base.css', 'styles/sidebar.css', 'styles/timeline.css', 'styles/cw-views.css', 'styles/overlays.css'];
+  const cssMtimes = await Promise.all(cssFiles.map(mtime));
+  versions['styles'] = Math.max(...cssMtimes);
 
   const newest = Math.max(...Object.values(versions));
   const d = new Date(newest);

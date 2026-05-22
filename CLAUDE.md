@@ -22,13 +22,20 @@ The codebase is split into three module folders plus a thin orchestrator at the 
 ├── index.html
 ├── app.js              ← orchestrator: imports, init(), refreshAll(), wireDomHandlers()
 ├── lookups.js          ← classic-script globals: SPORT_COLORS, SPORT_ICONS, FLAGS, …
-├── style.css
 ├── CLAUDE.md
 ├── assets/             ← shipped as-is: Stake_logo.svg, favicon-32x32.webp, tournaments.csv
+├── styles/             ← split CSS, loaded in cascade order:
+│   ├── base.css        ← :root design tokens, reset, header, search, layout
+│   ├── sidebar.css     ← timeline sidebar + filter button + filter panel
+│   ├── timeline.css    ← timeline rows/bars/markers + tooltip + mobile + view-toggle
+│   ├── cw-views.css    ← calendar, weekly, match panel, cw-sidebar shared
+│   └── overlays.css    ← promotions, bar fav buttons, settings panel, version badge
 ├── core/               ← shared foundation
 ├── features/           ← stateful feature modules
 └── views/              ← DOM-rendering modules
 ```
+
+**CSS organisation.** Five files loaded as separate `<link>` tags in `index.html` (HTTP/2 parallelises them). Each is a consecutive slice of the original `style.css`, so the cascade order matches what the app had before the split. **Design tokens** (`--bg`, `--text`, `--accent-gold`, `--t-fast`, `--r-md`, …) live at the top of `base.css` under `:root` — use them in new styles rather than re-hardcoding hex values or spacing constants.
 
 **Module folders at a glance:**
 
