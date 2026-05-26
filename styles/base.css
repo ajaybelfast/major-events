@@ -29,6 +29,7 @@
   --accent-green:     #7ee787;  /* keyboard help icon */
   --accent-green-live:#3fb950;  /* "live now" indicator */
   /* Accents (RGB triplets — for rgba() at varying opacities) */
+  --accent-blue-rgb:   88, 166, 255;
   --accent-gold-rgb:   247, 201, 72;
   --accent-purple-rgb: 192, 132, 252;
   --accent-red-rgb:    247, 129, 102;

@@ -7,7 +7,7 @@
 
 import { TOURNAMENTS, SPORT_CATEGORIES, effectiveCategory, loadData } from './core/data.js';
 import { computeTimelineBounds } from './core/timeline-config.js';
-import { currentView, setView } from './core/view-state.js';
+import { currentView, setView, applyViewBodyClass } from './core/view-state.js';
 import { loadFavourites } from './features/favourites.js';
 import { computeTopRevenueSports, loadTopRevenueFilter } from './features/top-revenue.js';
 import { loadPromoFilter, buildPromoRail, closePromoPanel } from './features/promotions.js';
@@ -25,6 +25,11 @@ import {
   clearCwSearch,
   filterCwSidebar,
   clearCwFilters,
+  hideCompleted,
+  setHideCompleted,
+  loadHideCompleted,
+  saveHideCompleted,
+  rebuildCwView,
 } from './features/cw-filters.js';
 import { openSettingsPanel, closeSettingsPanel } from './features/settings-panel.js';
 import { initKeyboardShortcuts } from './features/keyboard.js';
@@ -71,6 +76,24 @@ function wireDomHandlers() {
   on('.settings-close',       'click', closeSettingsPanel);
   on('#promoPanelBackdrop',   'click', closePromoPanel);
   on('.promo-panel-close',    'click', closePromoPanel);
+  on('#hideCompletedToggle',  'click', toggleHideCompleted);
+}
+
+// Toggle the "Hide completed events" preference (calendar/weekly only).
+function toggleHideCompleted() {
+  setHideCompleted(!hideCompleted);
+  saveHideCompleted();
+  syncHideCompletedUi();
+  rebuildCwView();
+}
+
+// Update the toggle's visual state to match the current preference.
+function syncHideCompletedUi() {
+  const btn = document.getElementById('hideCompletedToggle');
+  if (!btn) return;
+  btn.classList.toggle('is-on', hideCompleted);
+  const icon = btn.querySelector('.hide-completed-icon');
+  if (icon) icon.className = `hide-completed-icon fa-${hideCompleted ? 'solid fa-square-check' : 'regular fa-square'}`;
 }
 
 // Header date label — format "Wed 20 May 26". Called at init and from
@@ -131,6 +154,7 @@ async function init() {
     loadTopRevenueFilter();
     loadPromoFilter();
     loadFilters();
+    loadHideCompleted();
 
     // 3. First render of every view.
     renderAll();
@@ -143,6 +167,8 @@ async function init() {
     initMobileTouch();
     initKeyboardShortcuts();
     wireDomHandlers();
+    syncHideCompletedUi();
+    applyViewBodyClass(currentView);
     if (window.innerWidth <= 768) {
       document.querySelector('.sidebar').classList.add('collapsed');
     }

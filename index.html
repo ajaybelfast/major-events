@@ -37,15 +37,21 @@
     <div class="header-today-date" id="headerTodayDate"></div>
   </div>
   <div class="header-right">
-    <div class="view-toggle">
-      <button class="view-btn on" id="btnTimeline" title="Timeline view (V to cycle)">
-        <i class="fa-solid fa-table-list"></i><span class="view-btn-label">Timeline</span>
-      </button>
-      <button class="view-btn" id="btnCalendar" title="Calendar view (V to cycle)">
-        <i class="fa-solid fa-calendar-days"></i><span class="view-btn-label">Calendar</span>
-      </button>
-      <button class="view-btn" id="btnWeekly" title="Weekly view (V to cycle)">
-        <i class="fa-solid fa-list-ul"></i><span class="view-btn-label">Weekly</span>
+    <div class="view-control-stack">
+      <div class="view-toggle">
+        <button class="view-btn on" id="btnTimeline" title="Timeline view (V to cycle)">
+          <i class="fa-solid fa-table-list"></i><span class="view-btn-label">Timeline</span>
+        </button>
+        <button class="view-btn" id="btnCalendar" title="Calendar view (V to cycle)">
+          <i class="fa-solid fa-calendar-days"></i><span class="view-btn-label">Calendar</span>
+        </button>
+        <button class="view-btn" id="btnWeekly" title="Weekly view (V to cycle)">
+          <i class="fa-solid fa-list-ul"></i><span class="view-btn-label">Weekly</span>
+        </button>
+      </div>
+      <button class="hide-completed-toggle" id="hideCompletedToggle" title="Hide tournaments whose end date is before today (Calendar / Weekly views only)">
+        <i class="fa-regular fa-square hide-completed-icon"></i>
+        <span>Hide completed events</span>
       </button>
     </div>
     <div class="search-wrap">

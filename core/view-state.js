@@ -12,9 +12,18 @@ import { buildWeeklyView } from '../views/weekly.js';
 
 export let currentView = 'timeline';
 
+// Adds a `view-<name>` class to <body>, removing the previous one. CSS uses
+// this for view-scoped rules (e.g. hiding the "Hide completed" pill in
+// timeline view). Safe to call before setView() runs — used at boot.
+export function applyViewBodyClass(view) {
+  document.body.classList.remove('view-timeline', 'view-calendar', 'view-weekly');
+  document.body.classList.add(`view-${view}`);
+}
+
 export function setView(view) {
   currentView = view;
   try { localStorage.setItem('mjr_view', view); } catch {}
+  applyViewBodyClass(view);
 
   const mainEl    = document.getElementById('mainView');
   const cwLayout  = document.getElementById('cwLayout');

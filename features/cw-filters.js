@@ -9,7 +9,7 @@
 // Also owns `getFilteredTournaments()` — the single function every
 // non-timeline view goes through to obtain the currently-filtered set.
 
-import { getColor } from '../core/util.js';
+import { getColor, todayLocalStr } from '../core/util.js';
 import { TOURNAMENTS, effectiveCategory } from '../core/data.js';
 import { currentView } from '../core/view-state.js';
 import { buildCalendarView } from '../views/calendar.js';
@@ -40,11 +40,29 @@ import {
 
 export const cwFilters = { sports: new Set(), countries: new Set() };
 
+// User preference (applies to calendar + weekly views): when true, drop any
+// tournament whose endDate is strictly before today. "Strictly" means a
+// tournament that ends *today* still shows. Persisted to localStorage.
+const HIDE_COMPLETED_KEY = 'mjr_hide_completed';
+export let hideCompleted = false;
+
+export function setHideCompleted(v) {
+  hideCompleted = !!v;
+}
+export function loadHideCompleted() {
+  try { hideCompleted = localStorage.getItem(HIDE_COMPLETED_KEY) === '1'; }
+  catch { hideCompleted = false; }
+}
+export function saveHideCompleted() {
+  try { localStorage.setItem(HIDE_COMPLETED_KEY, hideCompleted ? '1' : '0'); } catch {}
+}
 
 export function getFilteredTournaments() {
   const { sports, countries } = cwFilters;
+  const todayStr = todayLocalStr();
   const tournaments = TOURNAMENTS;
-  if (!sports.size && !countries.size && !showOnlyFavourites && !showOnlyTopRevenue && !showOnlyPromos) {
+  if (!sports.size && !countries.size && !showOnlyFavourites
+      && !showOnlyTopRevenue && !showOnlyPromos && !hideCompleted) {
     return tournaments;
   }
   return tournaments.filter(ev => {
@@ -53,7 +71,8 @@ export function getFilteredTournaments() {
     const favOk     = !showOnlyFavourites || isFavourite(ev);
     const topRevOk  = !showOnlyTopRevenue || isTopRevenueSport(effectiveCategory(ev));
     const promoOk   = !showOnlyPromos || hasActivePromo(ev);
-    return sportOk && countryOk && favOk && topRevOk && promoOk;
+    const notDone   = !hideCompleted || ev.endDate >= todayStr;
+    return sportOk && countryOk && favOk && topRevOk && promoOk && notDone;
   });
 }
 

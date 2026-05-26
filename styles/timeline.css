@@ -433,3 +433,41 @@
   color: var(--text);
 }
 
+/* Stacks the view-toggle + "Hide completed events" pill vertically. The pill
+   only renders in cw views (calendar/weekly) — the body class .view-timeline
+   hides it on timeline. */
+.view-control-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.hide-completed-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 2px 9px;
+  cursor: pointer;
+  transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+}
+.hide-completed-toggle:hover { color: var(--text-mid); border-color: var(--border); }
+.hide-completed-toggle.is-on {
+  color: var(--accent-blue);
+  border-color: var(--accent-blue-deep);
+  background: rgba(var(--accent-blue-rgb), 0.08);
+}
+.hide-completed-toggle .hide-completed-icon { font-size: 11px; }
+
+/* Hidden in timeline view — only relevant to calendar/weekly. */
+body.view-timeline .hide-completed-toggle { display: none; }
+

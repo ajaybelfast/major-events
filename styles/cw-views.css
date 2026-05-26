@@ -358,7 +358,7 @@
 
 @keyframes week-flash {
   0%   { background: transparent; }
-  50%  { background: rgba(88, 166, 255, 0.22); }
+  50%  { background: rgba(var(--accent-blue-rgb), 0.22); }
   100% { background: transparent; }
 }
 
