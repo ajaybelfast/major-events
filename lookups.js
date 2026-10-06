@@ -243,7 +243,7 @@ const FLAGS = {
   'NZ':                    '🇳🇿', 'PNG':                  '🇵🇬',
   // ── Multi-country / special ───────────────────────────────
   'Europe':                '🇪🇺', 'Global':               '🌍', 'Multiple':         '🌍',
-  'TBC':                   '🌍',
+  'TBC':                   '🌍', 'Online':               '💻',
 };
 
 // Case-insensitive flag lookup — handles ALL CAPS or mixed-case country names from the sheet
